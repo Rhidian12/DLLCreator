@@ -4,6 +4,11 @@
 
 #include <iostream> /* std::cout, std::cin */
 #include <algorithm> /* std::sort */
+#include <assert.h> /* assert() */
+#include <fileapi.h> /* CreateFileA() */
+#include <errhandlingapi.h> /* GetLastError() */
+#include <handleapi.h> /* INVALID_HANDLE_VALUE */
+// #include <tchar.h> /* _tcscmp() */
 
 namespace DLL
 {
@@ -20,6 +25,9 @@ namespace DLL
 
 		/* Step 2: Ask user which files and folders need to be included in the DLL build */
 		FilterFilesAndDirectories();
+
+		/* Step 3: Find the .vcxproj file and define the preprocessor definition in it */
+		DefinePreprocessorMacro();
 	}
 
 	void DLLCreator::GetAllFilesAndDirectories()
@@ -86,6 +94,87 @@ namespace DLL
 		//{
 		//	std::cout << e << "\n";
 		//}
+	}
+
+	void DLLCreator::DefinePreprocessorMacro()
+	{
+		/* First search through the root path entries */
+
+		std::string vcxprojFilePath{};
+		for (const std::filesystem::directory_entry& entry : PathEntries)
+		{
+			if (entry.path().string().find(".vcxproj") != std::string::npos)
+			{
+				vcxprojFilePath = entry.path().string();
+			}
+		}
+
+		/* Check if we found a vcxproj file */
+		if (vcxprojFilePath.empty())
+		{
+			/* if we didn't, recursively search through every file to find it */
+			for (const std::filesystem::directory_entry& path : PathEntries)
+			{
+				for (const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator(path))
+				{
+					if (entry.path().string().find(".vcxproj") != std::string::npos)
+					{
+						vcxprojFilePath = entry.path().string();
+					}
+				}
+			}
+
+			/* if after all this we *still* haven't found the vcxproj, ask the user for the location */
+			std::string input;
+			do
+			{
+				std::cout << "\nPlease enter the absolute path to the .vcxproj file\n";
+				input = Utils::IO::ReadUserInput();
+			} while (input.find(".vcxproj") != std::string::npos);
+
+			vcxprojFilePath = input;
+		}
+
+		/* open the vcxproj file */
+		HANDLE vcxProjFile(
+			CreateFileA(vcxprojFilePath.c_str(),
+				GENERIC_READ | GENERIC_WRITE,
+				FILE_SHARE_READ | FILE_SHARE_WRITE,
+				nullptr,
+				OPEN_EXISTING,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
+
+		assert(vcxProjFile != INVALID_HANDLE_VALUE);
+
+		/* Read the file into a buffer */
+		const DWORD fileSize(GetFileSize(vcxProjFile, nullptr));
+
+		BYTE* pBuffer(new BYTE[fileSize]{});
+		DWORD readBytes{};
+		assert(ReadFile(vcxProjFile, pBuffer, fileSize, &readBytes, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > File could not be read!");
+
+		/* Parse the buffer, searching for preprocessor definitions*/
+		std::vector<DWORD> lineIndices{};
+		DWORD previousIndex{};
+		for (DWORD i{}; i < readBytes; ++i)
+		{
+			/* \n is our delimiter */
+			if (pBuffer[i] == '\n')
+			{
+				if (Utils::IO::StringContains(reinterpret_cast<const char*>(pBuffer + previousIndex), "<PreprocessorDefinitions>", '\n'))
+				{
+					lineIndices.push_back(i);
+				}
+
+				previousIndex = i;
+			}
+		}
+
+		inline constexpr static const char* exportMacro("EXPORT");
+
+		assert(CloseHandle(vcxProjFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
 	}
 
 	void DLLCreator::PrintDirectoryContents(const std::filesystem::directory_entry& entry)

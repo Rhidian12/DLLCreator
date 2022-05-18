@@ -74,7 +74,7 @@ namespace Utils
 			return 0;
 		}
 
-		/* https://stackoverflow.com/questions/18680118/own-implementation-of-stdstringfind-brute-force-search*/
+		/* https://stackoverflow.com/questions/18680118/own-implementation-of-stdstringfind-brute-force-search */
 		bool StringContains(const char* const pString, const char* const pOtherString, const char delimiter)
 		{
 			assert(pString != nullptr);

@@ -16,8 +16,9 @@ namespace DLL
 	private:
 		void GetAllFilesAndDirectories();
 		void FilterFilesAndDirectories();
-		void PrintDirectoryContents(const std::filesystem::directory_entry& entry);
+		void DefinePreprocessorMacro();
 
+		void PrintDirectoryContents(const std::filesystem::directory_entry& entry);
 		std::vector<size_t> GetNumbersFromCSVString(const std::string& userInput) const;
 
 		std::string RootPath;
