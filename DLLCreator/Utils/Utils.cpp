@@ -1,7 +1,7 @@
 #include "Utils.h"
 
-#include <windows.h> /* for ClearConsole() */
 #include <iostream> /* std::cin */
+#include <assert.h> /* assert() */
 
 namespace Utils
 {
@@ -40,6 +40,38 @@ namespace Utils
 			std::cin >> input;
 
 			return input == wantedInput;
+		}
+
+		int StringCompare(const char* const pString, const char* const pOtherString, const char delimiter)
+		{
+			assert(pString != nullptr);
+			assert(pOtherString != nullptr);
+
+			int counter{};
+			while (true)
+			{
+				if (pString[counter] != '\0' && pString[counter] != delimiter)
+				{
+					if (pOtherString[counter] == '\0' || pOtherString[counter] == delimiter)
+					{
+						return 1;
+					}
+
+					if (pOtherString[counter] > pString[counter])
+					{
+						return -1;
+					}
+
+					if (pString[counter] > pOtherString[counter])
+					{
+						return 1;
+					}
+				}
+
+				++counter;
+			}
+
+			return 0;
 		}
 	}
 }
