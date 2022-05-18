@@ -4,6 +4,8 @@
 
 namespace Utils
 {
+    /* Reference: https://stackoverflow.com/questions/5866529/how-do-we-clear-the-console-in-assembly/5866648#5866648 */
+    /* MSDN: https://docs.microsoft.com/en-us/windows/console/scrolling-a-screen-buffer-s-contents */
     void ClearConsole()
     {
         COORD topLeft = { 0, 0 };
@@ -12,10 +14,9 @@ namespace Utils
         DWORD written;
 
         GetConsoleScreenBufferInfo(console, &screen);
-        FillConsoleOutputCharacterA(
-            console, ' ', screen.dwSize.X * screen.dwSize.Y, topLeft, &written
-        );
-        FillConsoleOutputAttribute(
+        FillConsoleOutputCharacterA(console, ' ', screen.dwSize.X * screen.dwSize.Y, topLeft, &written);
+        FillConsoleOutputAttribute
+        (
             console, FOREGROUND_GREEN | FOREGROUND_RED | FOREGROUND_BLUE,
             screen.dwSize.X * screen.dwSize.Y, topLeft, &written
         );
