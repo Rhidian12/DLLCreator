@@ -17,5 +17,7 @@ namespace Utils
 
 		/* 0 means equal, 1 means pString > pOtherString, -1 means pOtherString > pString */
 		int StringCompare(const char* const pString, const char* const pOtherString, const char delimiter);
+		bool StringContains(const char* const pString, const char* const pOtherString, const char delimiter);
+		int StringLength(const char* const pString, const char delimiter);
 	}
 }

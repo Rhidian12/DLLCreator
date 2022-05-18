@@ -73,5 +73,43 @@ namespace Utils
 
 			return 0;
 		}
+
+		/* https://stackoverflow.com/questions/18680118/own-implementation-of-stdstringfind-brute-force-search*/
+		bool StringContains(const char* const pString, const char* const pOtherString, const char delimiter)
+		{
+			assert(pString != nullptr);
+			assert(pOtherString != nullptr);
+
+			int stringLen = StringLength(pString, delimiter);
+			int otherStringLen = StringLength(pOtherString, delimiter);
+
+			for (int i = 0; i <= stringLen - otherStringLen; ++i)
+			{
+				int j{};
+				while (j < otherStringLen && pString[i + j] == pOtherString[j])
+				{
+					++j;
+				}
+				
+				/* match found */
+				if (j == otherStringLen)
+				{ 
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		int StringLength(const char* const pString, const char delimiter)
+		{
+			int counter{};
+			while (pString[counter] != delimiter)
+			{
+				++counter;
+			}
+
+			return counter;
+		}
 	}
 }
