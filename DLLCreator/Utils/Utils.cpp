@@ -111,5 +111,21 @@ namespace Utils
 
 			return counter;
 		}
+
+		bool StringCopy(char* pDest, const char* pSource, const size_t count)
+		{
+			assert(pDest != nullptr);
+			assert(pSource != nullptr);
+
+			int x{ StringLength(pSource, '\n') };
+			assert(StringLength(pSource, '\n') >= count);
+
+			for (size_t i{}; i < count; ++i)
+			{
+				pDest[i] = pSource[i];
+			}
+
+			return true;
+		}
 	}
 }

@@ -1,5 +1,6 @@
 #pragma once
 
+#define __STDC_WANT_LIB_EXT1__ 1 /* strncpy_s */
 #include <string> /* std::string */
 #include <vector> /* std::vector */
 #include <filesystem> /* std::filesystem */

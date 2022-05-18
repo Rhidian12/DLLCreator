@@ -4,7 +4,8 @@
 
 int main()
 {
-    DLL::DLLCreator dll("D:\\Github\\DLLCreator");
+    /* desktop */
+    DLL::DLLCreator dll("C:\\Users\\rhidi\\Documents\\Sandbox\\Sandbox_Desktop");
 
     dll.Convert();
 }

@@ -5,6 +5,10 @@
 #include <iostream> /* std::cout, std::cin */
 #include <algorithm> /* std::sort */
 #include <assert.h> /* assert() */
+#include <deque> /* std::deque */
+#include <fstream>
+
+/* Windows specific includes */
 #include <fileapi.h> /* CreateFileA() */
 #include <errhandlingapi.h> /* GetLastError() */
 #include <handleapi.h> /* INVALID_HANDLE_VALUE */
@@ -24,7 +28,7 @@ namespace DLL
 		GetAllFilesAndDirectories();
 
 		/* Step 2: Ask user which files and folders need to be included in the DLL build */
-		FilterFilesAndDirectories();
+		// FilterFilesAndDirectories();
 
 		/* Step 3: Find the .vcxproj file and define the preprocessor definition in it */
 		DefinePreprocessorMacro();
@@ -101,11 +105,13 @@ namespace DLL
 		/* First search through the root path entries */
 
 		std::string vcxprojFilePath{};
+		const std::string suffix(".vcxproj");
 		for (const std::filesystem::directory_entry& entry : PathEntries)
 		{
-			if (entry.path().string().find(".vcxproj") != std::string::npos)
+			if (std::equal(suffix.rbegin(), suffix.rend(), entry.path().string().rbegin()))
 			{
 				vcxprojFilePath = entry.path().string();
+				break;
 			}
 		}
 
@@ -117,9 +123,10 @@ namespace DLL
 			{
 				for (const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator(path))
 				{
-					if (entry.path().string().find(".vcxproj") != std::string::npos)
+					if (std::equal(suffix.rbegin(), suffix.rend(), entry.path().string().rbegin()))
 					{
 						vcxprojFilePath = entry.path().string();
+						break;
 					}
 				}
 			}
@@ -155,24 +162,78 @@ namespace DLL
 		DWORD readBytes{};
 		assert(ReadFile(vcxProjFile, pBuffer, fileSize, &readBytes, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > File could not be read!");
 
-		/* Parse the buffer, searching for preprocessor definitions*/
-		std::vector<DWORD> lineIndices{};
+		/* Parse the buffer, searching for preprocessor definitions */
+		std::deque<DWORD> lineIndices{};
 		DWORD previousIndex{};
 		for (DWORD i{}; i < readBytes; ++i)
 		{
 			/* \n is our delimiter */
-			if (pBuffer[i] == '\n')
+			if (pBuffer[i] == static_cast<BYTE>('\n'))
 			{
-				if (Utils::IO::StringContains(reinterpret_cast<const char*>(pBuffer + previousIndex), "<PreprocessorDefinitions>", '\n'))
+				char* pLine{ new char[i - previousIndex]{} };
+				assert(Utils::IO::StringCopy(pLine, reinterpret_cast<const char*>(pBuffer) + previousIndex, i - previousIndex) && "DLLCreator::DefinePreprocessorMacros() > String could not be copied!");
+				if (Utils::IO::StringContains(pLine, "<PreprocessorDefinitions>\n", '\n'))
 				{
-					lineIndices.push_back(i);
+					lineIndices.push_back(previousIndex);
 				}
 
-				previousIndex = i;
+				delete[] pLine;
+
+				previousIndex = i + 1;
 			}
 		}
 
-		inline constexpr static const char* exportMacro("EXPORT");
+		constexpr DWORD exportLength{ 8 };
+		constexpr BYTE exportMacro[exportLength]("EXPORT;");
+
+		/* Make a new buffer with the length of the vcxproj + the export macro added (amount of times as there are preprocesser definitions defined) */
+		const DWORD newBufferSize(fileSize + static_cast<DWORD>(lineIndices.size()) * exportLength);
+		BYTE* pNewBuffer(new BYTE[newBufferSize]{});
+		for (DWORD i{}, newFileCounter{}; i < fileSize; ++i, ++newFileCounter)
+		{
+			if (lineIndices.empty() || i < lineIndices.front())
+			{
+				pNewBuffer[newFileCounter] = pBuffer[i];
+			}
+			else
+			{
+				/* just keep filling up the buffer until we meet the % */
+				if (pBuffer[i] != static_cast<BYTE>('%'))
+				{
+					pNewBuffer[newFileCounter] = pBuffer[i];
+				}
+				else
+				{
+					/* add macro to the buffer */
+					for (DWORD j{}; j < exportLength; ++j)
+					{
+						pNewBuffer[newFileCounter++] = exportMacro[j];
+					}
+
+					pNewBuffer[newFileCounter++] = static_cast<BYTE>('%');
+
+					lineIndices.pop_front();
+
+					for (DWORD& elem : lineIndices)
+					{
+						elem += exportLength;
+					}
+				}
+			}
+		}
+
+		DWORD bytesWritten{};
+		// assert(WriteFile(vcxProjFile, pNewBuffer, newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+
+		std::ofstream stream("Test.txt", std::ios::out);
+
+		for (DWORD i{}; i < newBufferSize; ++i)
+		{
+			stream << pNewBuffer[i];
+		}
+
+		delete[] pBuffer;
+		delete[] pNewBuffer;
 
 		assert(CloseHandle(vcxProjFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
 	}
