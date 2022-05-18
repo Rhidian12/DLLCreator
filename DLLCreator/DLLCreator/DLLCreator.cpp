@@ -82,10 +82,10 @@ namespace DLL
 			}
 		}
 
-		for (const std::string& e : FilteredFilePaths)
-		{
-			std::cout << e << "\n";
-		}
+		//for (const std::string& e : FilteredFilePaths)
+		//{
+		//	std::cout << e << "\n";
+		//}
 	}
 
 	void DLLCreator::PrintDirectoryContents(const std::filesystem::directory_entry& entry)
