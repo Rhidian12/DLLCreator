@@ -1,6 +1,10 @@
+#include "DLLCreator/DLLCreator.h"
+
 #include <iostream>
 
 int main()
 {
-    std::cout << "Hello World!\n";
+    DLL::DLLCreator dll("D:\\Github\\DLLCreator");
+
+    dll.Convert();
 }
