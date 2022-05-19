@@ -5,6 +5,8 @@
 #include <vector> /* std::vector */
 #include <filesystem> /* std::filesystem */
 
+#define WRITE_TO_TEST_FILE
+
 namespace DLL
 {
 	class DLLCreator final

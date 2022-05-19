@@ -188,7 +188,7 @@ namespace DLL
 
 		/* Make a new buffer with the length of the vcxproj + the export macro added (amount of times as there are preprocesser definitions defined) */
 		const DWORD newBufferSize(fileSize + static_cast<DWORD>(lineIndices.size()) * exportLength);
-		BYTE* pNewBuffer(new BYTE[newBufferSize*2]{});
+		BYTE* pNewBuffer(new BYTE[newBufferSize]{});
 		for (DWORD i{}, newFileCounter{}; i < fileSize; ++i, ++newFileCounter)
 		{
 			if (lineIndices.empty() || i < lineIndices.front())
@@ -223,14 +223,25 @@ namespace DLL
 		}
 
 		DWORD bytesWritten{};
-		// assert(WriteFile(vcxProjFile, pNewBuffer, newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+#ifdef WRITE_TO_TEST_FILE
+		/* open the test file */
+		HANDLE testFile(
+			CreateFileA("Test.txt",
+				GENERIC_WRITE,
+				FILE_SHARE_WRITE,
+				nullptr,
+				OPEN_ALWAYS,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
 
-		std::ofstream stream("Test.txt", std::ios::out);
+		assert(testFile != INVALID_HANDLE_VALUE);
 
-		for (DWORD i{}; i < newBufferSize; ++i)
-		{
-			stream << pNewBuffer[i];
-		}
+		assert(WriteFile(testFile, pNewBuffer, newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+		assert(CloseHandle(testFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
+#else
+		assert(WriteFile(vcxProjFile, pNewBuffer, newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+#endif
 
 		delete[] pBuffer;
 		delete[] pNewBuffer;
