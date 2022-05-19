@@ -183,8 +183,8 @@ namespace DLL
 			}
 		}
 
-		constexpr DWORD exportLength{ 8 };
-		constexpr BYTE exportMacro[exportLength]("EXPORT;");
+		constexpr DWORD exportLength{ 9 };
+		constexpr BYTE exportMacro[exportLength]("EXPORT;\n");
 
 		/* Make a new buffer with the length of the vcxproj + the export macro added (amount of times as there are preprocesser definitions defined) */
 		const DWORD newBufferSize(fileSize + static_cast<DWORD>(lineIndices.size()) * exportLength);
