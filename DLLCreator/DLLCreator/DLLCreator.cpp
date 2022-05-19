@@ -54,6 +54,25 @@ namespace DLL
 				//return static_cast<int>(a.is_directory()) > static_cast<int>(b.is_directory());
 			});
 
+		/* Exclude certain files we know should not be converted already */
+		PathEntries.erase(std::remove_if(PathEntries.begin(), PathEntries.end(), [](const std::filesystem::directory_entry& entry)
+			{
+				const std::string path(entry.path().string());
+
+				return path.find(".sln") != std::string::npos ||
+					path.find(".vcxproj.user") != std::string::npos ||
+					path.find(".vcxproj.filters") != std::string::npos ||
+					path.find(".rar") != std::string::npos ||
+					path.find(".zip") != std::string::npos ||
+					path.find(".txt") != std::string::npos ||
+					path.find(".props") != std::string::npos ||
+					path.find(".bin") != std::string::npos ||
+					path.find(".exe") != std::string::npos ||
+					path.find(".lib") != std::string::npos ||
+					path.find(".dll") != std::string::npos ||
+					path.find(".cpp") != std::string::npos;
+			}), PathEntries.end());
+
 		/* Testing */
 		//for (const std::filesystem::directory_entry& entry : PathEntries)
 		//{
