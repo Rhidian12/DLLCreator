@@ -19,6 +19,8 @@ namespace Utils
 		int StringCompare(const char* const pString, const char* const pOtherString, const char delimiter);
 		bool StringContains(const char* const pString, const char* const pOtherString, const char delimiter);
 		int StringLength(const char* const pString, const char delimiter);
+		int StringLength(const BYTE* const pString, const char delimiter);
 		bool StringCopy(char* pDest, const char* pSource, const size_t count);
+		bool StringCopy(BYTE* pDest, const BYTE* pSource, const size_t count);
 	}
 }
