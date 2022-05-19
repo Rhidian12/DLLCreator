@@ -28,7 +28,7 @@ namespace DLL
 		GetAllFilesAndDirectories();
 
 		/* Step 2: Ask user which files and folders need to be included in the DLL build */
-		// FilterFilesAndDirectories();
+		FilterFilesAndDirectories();
 
 		/* Step 3: Find the .vcxproj file and define the preprocessor definition in it */
 		DefinePreprocessorMacro();
@@ -74,6 +74,8 @@ namespace DLL
 	{
 		for (const std::filesystem::directory_entry& entry : PathEntries)
 		{
+			Utils::IO::ClearConsole();
+
 			if (entry.is_directory())
 			{
 				std::cout << "Directory:\t" << entry.path().string() << "\nEnter Directory? Y/N >> ";
