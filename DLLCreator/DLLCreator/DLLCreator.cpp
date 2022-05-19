@@ -183,12 +183,12 @@ namespace DLL
 			}
 		}
 
-		constexpr DWORD exportLength{ 9 };
-		constexpr BYTE exportMacro[exportLength]("EXPORT;\n");
+		constexpr DWORD exportLength{ 7 };
+		constexpr BYTE exportMacro[9]("EXPORT;\n");
 
 		/* Make a new buffer with the length of the vcxproj + the export macro added (amount of times as there are preprocesser definitions defined) */
 		const DWORD newBufferSize(fileSize + static_cast<DWORD>(lineIndices.size()) * exportLength);
-		BYTE* pNewBuffer(new BYTE[newBufferSize]{});
+		BYTE* pNewBuffer(new BYTE[newBufferSize*2]{});
 		for (DWORD i{}, newFileCounter{}; i < fileSize; ++i, ++newFileCounter)
 		{
 			if (lineIndices.empty() || i < lineIndices.front())
@@ -210,7 +210,7 @@ namespace DLL
 						pNewBuffer[newFileCounter++] = exportMacro[j];
 					}
 
-					pNewBuffer[newFileCounter++] = static_cast<BYTE>('%');
+					pNewBuffer[newFileCounter] = static_cast<BYTE>('%');
 
 					lineIndices.pop_front();
 
