@@ -20,11 +20,15 @@ namespace DLL
 		void GetAllFilesAndDirectories();
 		void FilterFilesAndDirectories();
 		void DefinePreprocessorMacro();
+		void CreateAPIFile();
 
 		void PrintDirectoryContents(const std::filesystem::directory_entry& entry);
 		std::vector<size_t> GetNumbersFromCSVString(const std::string& userInput) const;
 
 		std::string RootPath;
+		std::string APIFileName;
+		std::string APIFileNamePath;
+		std::string APIMacro;
 		std::vector<std::filesystem::directory_entry> PathEntries;
 		std::vector<std::string> FilteredFilePaths;
 	};

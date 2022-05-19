@@ -6,7 +6,7 @@
 #include <algorithm> /* std::sort */
 #include <assert.h> /* assert() */
 #include <deque> /* std::deque */
-#include <fstream>
+#include <memory> /* std::unique_ptr */
 
 /* Windows specific includes */
 #include <fileapi.h> /* CreateFileA() */
@@ -28,10 +28,13 @@ namespace DLL
 		GetAllFilesAndDirectories();
 
 		/* Step 2: Ask user which files and folders need to be included in the DLL build */
-		FilterFilesAndDirectories();
+		// FilterFilesAndDirectories();
 
 		/* Step 3: Find the .vcxproj file and define the preprocessor definition in it */
 		DefinePreprocessorMacro();
+
+		/* Step 4: Create the API file that defines the macro */
+		CreateAPIFile();
 	}
 
 	void DLLCreator::GetAllFilesAndDirectories()
@@ -179,9 +182,9 @@ namespace DLL
 		/* Read the file into a buffer */
 		const DWORD fileSize(GetFileSize(vcxProjFile, nullptr));
 
-		BYTE* pBuffer(new BYTE[fileSize]{});
+		std::unique_ptr<BYTE[]> pBuffer(new BYTE[fileSize]{});
 		DWORD readBytes{};
-		assert(ReadFile(vcxProjFile, pBuffer, fileSize, &readBytes, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > File could not be read!");
+		assert(ReadFile(vcxProjFile, pBuffer.get(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > File could not be read!");
 
 		/* Parse the buffer, searching for preprocessor definitions */
 		std::deque<DWORD> lineIndices{};
@@ -191,14 +194,14 @@ namespace DLL
 			/* \n is our delimiter */
 			if (pBuffer[i] == static_cast<BYTE>('\n'))
 			{
-				char* pLine{ new char[i - previousIndex]{} };
-				assert(Utils::IO::StringCopy(pLine, reinterpret_cast<const char*>(pBuffer) + previousIndex, i - previousIndex) && "DLLCreator::DefinePreprocessorMacros() > String could not be copied!");
-				if (Utils::IO::StringContains(pLine, "<PreprocessorDefinitions>\n", '\n'))
+				std::unique_ptr<char[]> pLine{new char[i - previousIndex]{}};
+				assert(Utils::IO::StringCopy(pLine.get(), reinterpret_cast<const char*>(pBuffer.get()) + previousIndex, i - previousIndex) && "DLLCreator::DefinePreprocessorMacros() > String could not be copied!");
+				if (Utils::IO::StringContains(pLine.get(), "<PreprocessorDefinitions>\n", '\n'))
 				{
 					lineIndices.push_back(previousIndex);
 				}
 
-				delete[] pLine;
+				// delete[] pLine;
 
 				previousIndex = i + 1;
 			}
@@ -209,7 +212,7 @@ namespace DLL
 
 		/* Make a new buffer with the length of the vcxproj + the export macro added (amount of times as there are preprocesser definitions defined) */
 		const DWORD newBufferSize(fileSize + static_cast<DWORD>(lineIndices.size()) * exportLength);
-		BYTE* pNewBuffer(new BYTE[newBufferSize]{});
+		std::unique_ptr<BYTE[]> pNewBuffer(new BYTE[newBufferSize]{});
 		for (DWORD i{}, newFileCounter{}; i < fileSize; ++i, ++newFileCounter)
 		{
 			if (lineIndices.empty() || i < lineIndices.front())
@@ -258,16 +261,97 @@ namespace DLL
 
 		assert(testFile != INVALID_HANDLE_VALUE);
 
-		assert(WriteFile(testFile, pNewBuffer, newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+		assert(WriteFile(testFile, pNewBuffer.get(), newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 		assert(CloseHandle(testFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
 #else
 		assert(WriteFile(vcxProjFile, pNewBuffer, newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 #endif
 
-		delete[] pBuffer;
-		delete[] pNewBuffer;
+		// delete[] pBuffer;
+		// delete[] pNewBuffer;
 
 		assert(CloseHandle(vcxProjFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
+	}
+
+	void DLLCreator::CreateAPIFile()
+	{
+		/* Make the API file in the Root Directory */
+		std::string api{};
+
+		/* Make sure there is no file already with the apiFileName */
+		int counter{};
+		bool bShouldLoop(true);
+		do
+		{
+			api = RootPath.substr(RootPath.find_last_of('\\') + 1, RootPath.size() - RootPath.find_last_of('\\')) +
+				"_API";
+
+			const auto cIt(std::find_if(PathEntries.cbegin(), PathEntries.cend(), [&api](const std::filesystem::directory_entry& entry)
+				{
+					return entry.path().string().find(api) != std::string::npos;
+				}));
+
+			/* The file already exists, ask the user if it can be overwritten */
+			if (cIt != PathEntries.cend())
+			{
+				if (counter > 0)
+				{
+					api.append("_CUSTOMTOOL" + std::to_string(0));
+				}
+				else
+				{
+					api.append("_CUSTOMTOOL");
+				}
+
+				Utils::IO::ClearConsole();
+
+				std::cout << "The file: " << api <<
+					" already exists, but the program wants to use this name. Can the file be overwritten? Y/N >> ";
+
+				if (Utils::IO::ReadUserInput("Y"))
+				{
+					bShouldLoop = false;
+				}
+			}
+			else
+			{
+				bShouldLoop = false;
+			}
+		} while (bShouldLoop);
+
+		APIMacro = api;
+		APIFileName = api.append(".h");
+		APIFileNamePath = RootPath + "\\" + APIFileName;
+
+		/* Now open the actual file and write the contents */
+		HANDLE apiFile(
+			CreateFileA(APIFileNamePath.c_str(),
+				GENERIC_WRITE,
+				FILE_SHARE_WRITE,
+				nullptr,
+				OPEN_ALWAYS,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
+
+		assert(apiFile != INVALID_HANDLE_VALUE);
+
+		const std::string apiContents(
+			std::string("#pragma once\n\n") +
+			std::string("#ifdef _WIN32\n") + 
+			std::string("\t#ifdef EXPORT\n") + 
+			std::string("\t\t#define ") + APIMacro + " __declspec(dllexport)\n" + 
+			std::string("\t#else\n") +
+			std::string("\t\t#define ") + APIMacro + " __declspec(dllimport)\n" + 
+			std::string("\t#endif\n") + 
+			std::string("#else\n") + 
+			std::string("\t#define ") + APIMacro + "\n" + 
+			std::string("#endif"));
+
+		DWORD bytesWritten{};
+		assert(WriteFile(apiFile, apiContents.c_str(), static_cast<DWORD>(apiContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::CreateAPIFile() > The API file could not be written to!");
+
+		assert(CloseHandle(apiFile) != 0 && "DLLCreator::CreateAPIFile() > Handle to file could not be closed!");
 	}
 
 	void DLLCreator::PrintDirectoryContents(const std::filesystem::directory_entry& entry)

@@ -1,6 +1,7 @@
 #include "DLLCreator/DLLCreator.h"
 
 #include <iostream>
+#include <vld.h>
 
 int main()
 {
