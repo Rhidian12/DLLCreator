@@ -28,7 +28,7 @@ namespace DLL
 		GetAllFilesAndDirectories();
 
 		/* Step 2: Ask user which files and folders need to be included in the DLL build */
-		// FilterFilesAndDirectories();
+		FilterFilesAndDirectories();
 
 		/* Step 3: Find the .vcxproj file and define the preprocessor definition in it */
 		DefinePreprocessorMacro();
@@ -37,7 +37,7 @@ namespace DLL
 		CreateAPIFile();
 
 		/* Step 5: Go through every filtered header file and start adding the include and the generated macro */
-
+		AddMacroToFilteredHeaderFiles();
 	}
 
 	void DLLCreator::GetAllFilesAndDirectories()
@@ -197,7 +197,7 @@ namespace DLL
 			/* \n is our delimiter */
 			if (pBuffer[i] == static_cast<BYTE>('\n'))
 			{
-				std::unique_ptr<char[]> pLine{new char[i - previousIndex]{}};
+				std::unique_ptr<char[]> pLine{ new char[i - previousIndex]{} };
 				assert(Utils::IO::StringCopy(pLine.get(), reinterpret_cast<const char*>(pBuffer.get()) + previousIndex, i - previousIndex) && "DLLCreator::DefinePreprocessorMacros() > String could not be copied!");
 				if (Utils::IO::StringContains(pLine.get(), "<PreprocessorDefinitions>\n", '\n'))
 				{
@@ -297,15 +297,6 @@ namespace DLL
 			/* The file already exists, ask the user if it can be overwritten */
 			if (cIt != PathEntries.cend())
 			{
-				if (counter > 0)
-				{
-					api.append("_CUSTOMTOOL" + std::to_string(0));
-				}
-				else
-				{
-					api.append("_CUSTOMTOOL");
-				}
-
 				Utils::IO::ClearConsole();
 
 				std::cout << "The file: " << api <<
@@ -314,6 +305,17 @@ namespace DLL
 				if (Utils::IO::ReadUserInput("Y"))
 				{
 					bShouldLoop = false;
+				}
+				else
+				{
+					if (counter > 0)
+					{
+						api.append("_CUSTOMTOOL" + std::to_string(0));
+					}
+					else
+					{
+						api.append("_CUSTOMTOOL");
+					}
 				}
 			}
 			else
@@ -341,14 +343,14 @@ namespace DLL
 
 		const std::string apiContents(
 			std::string("#pragma once\n\n") +
-			std::string("#ifdef _WIN32\n") + 
-			std::string("\t#ifdef EXPORT\n") + 
-			std::string("\t\t#define ") + APIMacro + " __declspec(dllexport)\n" + 
+			std::string("#ifdef _WIN32\n") +
+			std::string("\t#ifdef EXPORT\n") +
+			std::string("\t\t#define ") + APIMacro + " __declspec(dllexport)\n" +
 			std::string("\t#else\n") +
-			std::string("\t\t#define ") + APIMacro + " __declspec(dllimport)\n" + 
-			std::string("\t#endif\n") + 
-			std::string("#else\n") + 
-			std::string("\t#define ") + APIMacro + "\n" + 
+			std::string("\t\t#define ") + APIMacro + " __declspec(dllimport)\n" +
+			std::string("\t#endif\n") +
+			std::string("#else\n") +
+			std::string("\t#define ") + APIMacro + "\n" +
 			std::string("#endif"));
 
 		DWORD bytesWritten{};
@@ -385,7 +387,17 @@ namespace DLL
 
 			Utils::IO::ClearConsole();
 
+			for (DWORD i{}; i < readBytes; ++i)
+			{
+				std::cout << pBuffer[i];
+			}
 
+			std::cout << "\n Should class be fully exported? Y/N >> ";
+
+			if (Utils::IO::ReadUserInput("Y"))
+			{
+
+			}
 		}
 	}
 
