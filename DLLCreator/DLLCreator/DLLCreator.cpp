@@ -35,6 +35,9 @@ namespace DLL
 
 		/* Step 4: Create the API file that defines the macro */
 		CreateAPIFile();
+
+		/* Step 5: Go through every filtered header file and start adding the include and the generated macro */
+
 	}
 
 	void DLLCreator::GetAllFilesAndDirectories()
@@ -352,6 +355,38 @@ namespace DLL
 		assert(WriteFile(apiFile, apiContents.c_str(), static_cast<DWORD>(apiContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::CreateAPIFile() > The API file could not be written to!");
 
 		assert(CloseHandle(apiFile) != 0 && "DLLCreator::CreateAPIFile() > Handle to file could not be closed!");
+	}
+
+	void DLLCreator::AddMacroToFilteredHeaderFiles()
+	{
+		for (const std::string& entry : FilteredFilePaths)
+		{
+			/* print file contents */
+
+			/* open the header */
+			HANDLE header(
+				CreateFileA(entry.c_str(),
+					GENERIC_READ | GENERIC_WRITE,
+					FILE_SHARE_READ | FILE_SHARE_WRITE,
+					nullptr,
+					OPEN_EXISTING,
+					FILE_ATTRIBUTE_NORMAL,
+					nullptr)
+			);
+
+			assert(header != INVALID_HANDLE_VALUE);
+
+			/* Read the file into a buffer */
+			const DWORD fileSize(GetFileSize(header, nullptr));
+
+			std::unique_ptr<BYTE[]> pBuffer(new BYTE[fileSize]{});
+			DWORD readBytes{};
+			assert(ReadFile(header, pBuffer.get(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > File could not be read!");
+
+			Utils::IO::ClearConsole();
+
+
+		}
 	}
 
 	void DLLCreator::PrintDirectoryContents(const std::filesystem::directory_entry& entry)

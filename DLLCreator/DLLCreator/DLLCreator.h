@@ -21,6 +21,7 @@ namespace DLL
 		void FilterFilesAndDirectories();
 		void DefinePreprocessorMacro();
 		void CreateAPIFile();
+		void AddMacroToFilteredHeaderFiles();
 
 		void PrintDirectoryContents(const std::filesystem::directory_entry& entry);
 		std::vector<size_t> GetNumbersFromCSVString(const std::string& userInput) const;
