@@ -9,6 +9,13 @@ namespace Utils
 {
 	namespace IO
 	{
+		unsigned char* operator""_byte(const char* pString, size_t size)
+		{
+			unsigned char* pNewString(new BYTE[size + 1]);
+			strcpy_s(reinterpret_cast<char*>(pNewString), size + 1, pString);
+			return pNewString;
+		}
+
 		/* Reference: https://stackoverflow.com/questions/5866529/how-do-we-clear-the-console-in-assembly/5866648#5866648 */
 		/* MSDN: https://docs.microsoft.com/en-us/windows/console/scrolling-a-screen-buffer-s-contents */
 		void ClearConsole()
@@ -124,10 +131,10 @@ namespace Utils
 				{
 					++j;
 				}
-				
+
 				/* match found */
 				if (j == otherStringLen)
-				{ 
+				{
 					return true;
 				}
 			}

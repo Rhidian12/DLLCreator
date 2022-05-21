@@ -23,6 +23,7 @@ namespace DLL
 		void CreateAPIFile();
 		void AddMacroToFilteredHeaderFiles();
 
+		std::string FindVcxprojFilePath() const;
 		void PrintDirectoryContents(const std::filesystem::directory_entry& entry);
 		std::vector<size_t> GetNumbersFromCSVString(const std::string& userInput) const;
 
@@ -34,6 +35,6 @@ namespace DLL
 		std::vector<std::string> FilteredFilePaths;
 
 		constexpr inline static const unsigned long /* DWORD */ ExportMacroLength{7};
-		constexpr inline static const unsigned char /* BYTE */ ExportMacro[9]{"EXPORT;\n"};
+		constexpr inline static const unsigned char /* BYTE */ ExportMacro[ExportMacroLength + 1]{"EXPORT;"};
 	};
 }

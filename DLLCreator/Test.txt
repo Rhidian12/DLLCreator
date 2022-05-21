@@ -151,6 +151,9 @@
   <ItemGroup>
     <ClCompile Include="Sandbox.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Point2f\Point2f.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>

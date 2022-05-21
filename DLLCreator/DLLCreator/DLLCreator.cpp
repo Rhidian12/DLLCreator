@@ -25,6 +25,8 @@ namespace DLL
 
 	void DLLCreator::Convert()
 	{
+		std::basic_string<BYTE> test;
+
 		/* [TODO]: Do all of this with Qt */
 
 		/* Step 1: Get all folders and files in this root directory */
@@ -40,7 +42,7 @@ namespace DLL
 		CreateAPIFile();
 
 		/* Step 5: Go through every filtered header file and start adding the include and the generated macro */
-		AddMacroToFilteredHeaderFiles();
+		// AddMacroToFilteredHeaderFiles();
 	}
 
 	void DLLCreator::GetAllFilesAndDirectories()
@@ -137,45 +139,9 @@ namespace DLL
 
 	void DLLCreator::DefinePreprocessorMacro()
 	{
-		/* First search through the root path entries */
+		Utils::IO::ClearConsole();
 
-		std::string vcxprojFilePath{};
-		const std::string suffix(".vcxproj");
-		for (const std::filesystem::directory_entry& entry : PathEntries)
-		{
-			if (std::equal(suffix.rbegin(), suffix.rend(), entry.path().string().rbegin()))
-			{
-				vcxprojFilePath = entry.path().string();
-				break;
-			}
-		}
-
-		/* Check if we found a vcxproj file */
-		if (vcxprojFilePath.empty())
-		{
-			/* if we didn't, recursively search through every file to find it */
-			for (const std::filesystem::directory_entry& path : PathEntries)
-			{
-				for (const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator(path))
-				{
-					if (std::equal(suffix.rbegin(), suffix.rend(), entry.path().string().rbegin()))
-					{
-						vcxprojFilePath = entry.path().string();
-						break;
-					}
-				}
-			}
-
-			/* if after all this we *still* haven't found the vcxproj, ask the user for the location */
-			std::string input;
-			do
-			{
-				std::cout << "\nPlease enter the absolute path to the .vcxproj file\n";
-				input = Utils::IO::ReadUserInput();
-			} while (input.find(".vcxproj") != std::string::npos);
-
-			vcxprojFilePath = input;
-		}
+		std::string vcxprojFilePath = FindVcxprojFilePath();
 
 		/* open the vcxproj file */
 		HANDLE vcxProjFile(
@@ -190,13 +156,43 @@ namespace DLL
 
 		assert(vcxProjFile != INVALID_HANDLE_VALUE);
 
+		std::basic_string<BYTE> fileContents{};
+
 		/* Read the file into a buffer */
 		const DWORD fileSize(GetFileSize(vcxProjFile, nullptr));
+		fileContents.resize(fileSize);
 
-		std::unique_ptr<BYTE[]> pBuffer(new BYTE[fileSize]{});
 		DWORD readBytes{};
-		assert(ReadFile(vcxProjFile, pBuffer.get(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > File could not be read!");
+		assert(ReadFile(vcxProjFile, fileContents.data(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > File could not be read!");
 
+		const size_t count = std::count(fileContents.cbegin(), fileContents.cend(), '\n');
+		std::deque<size_t> charPositions{};
+
+		size_t previousNewLine{};
+		for (size_t i{}; i < count; ++i)
+		{
+			const size_t nextNewLine(fileContents.find('\n', previousNewLine));
+			const std::basic_string<BYTE> line(fileContents.substr(previousNewLine, nextNewLine + 1 - previousNewLine));
+
+			{ /* Scope-lock the using directives */
+				using namespace Utils;
+				using namespace IO;
+
+				if (line.find(std::unique_ptr<unsigned char[]>("<PreprocessorDefinitions>"_byte).get()) != std::string::npos)
+				{
+					std::cout << line.c_str();
+
+					const size_t moduloPos(line.find_last_of(';'));
+
+					assert(moduloPos != std::string::npos && "DLLCreator::DefinePreprocessorMacros() > % was not found in the Preprocessor line!");
+
+					charPositions.push_back(moduloPos + previousNewLine + 1);
+				}
+			}
+
+			previousNewLine = nextNewLine + 2;
+		}
+#if 0
 		/* Parse the buffer, searching for preprocessor definitions */
 		std::deque<DWORD> lineIndices{};
 		DWORD previousIndex{};
@@ -208,9 +204,13 @@ namespace DLL
 				std::unique_ptr<BYTE[]> pLine{ new BYTE[i - previousIndex]{} };
 				assert(Utils::IO::StringCopy(pLine.get(), pBuffer.get() + previousIndex, i - previousIndex) && "DLLCreator::DefinePreprocessorMacros() > String could not be copied!");
 
-				if (Utils::IO::StringContains(pLine.get(), reinterpret_cast<const BYTE*>("<PreprocessorDefinitions>\n"), '\n'))
 				{
-					lineIndices.push_back(previousIndex);
+					using namespace Utils;
+					using namespace IO;
+					if (Utils::IO::StringContains(pLine.get(), "<PreprocessorDefinitions>\n"_byte, '\n'))
+					{
+						lineIndices.push_back(previousIndex);
+					}
 				}
 
 				previousIndex = i + 1;
@@ -252,6 +252,19 @@ namespace DLL
 				}
 			}
 		}
+#endif
+
+		for (size_t i{}; i < charPositions.size();)
+		{
+			fileContents.insert(charPositions[i], ExportMacro);
+
+			for (size_t j{ i }; j < charPositions.size(); ++j)
+			{
+				charPositions[j] += ExportMacroLength;
+			}
+
+			charPositions.pop_front();
+		}
 
 		DWORD bytesWritten{};
 #ifdef WRITE_TO_TEST_FILE
@@ -268,7 +281,9 @@ namespace DLL
 
 		assert(testFile != INVALID_HANDLE_VALUE);
 
-		assert(WriteFile(testFile, pNewBuffer.get(), newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+		// assert(WriteFile(testFile, pNewBuffer.get(), newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+		// assert(WriteFile(testFile, pNewBuffer.get(), newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+		assert(WriteFile(testFile, fileContents.data(), fileContents.size(), &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 		assert(CloseHandle(testFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
 #else
 		assert(WriteFile(vcxProjFile, pNewBuffer.get(), newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
@@ -483,6 +498,51 @@ namespace DLL
 
 			}
 		}
+	}
+
+	std::string DLLCreator::FindVcxprojFilePath() const
+	{
+		/* First search through the root path entries */
+
+		std::string vcxprojFilePath{};
+		const std::string suffix(".vcxproj");
+		for (const std::filesystem::directory_entry& entry : PathEntries)
+		{
+			if (std::equal(suffix.rbegin(), suffix.rend(), entry.path().string().rbegin()))
+			{
+				vcxprojFilePath = entry.path().string();
+				break;
+			}
+		}
+
+		/* Check if we found a vcxproj file */
+		if (vcxprojFilePath.empty())
+		{
+			/* if we didn't, recursively search through every file to find it */
+			for (const std::filesystem::directory_entry& path : PathEntries)
+			{
+				for (const std::filesystem::directory_entry& entry : std::filesystem::recursive_directory_iterator(path))
+				{
+					if (std::equal(suffix.rbegin(), suffix.rend(), entry.path().string().rbegin()))
+					{
+						vcxprojFilePath = entry.path().string();
+						break;
+					}
+				}
+			}
+
+			/* if after all this we *still* haven't found the vcxproj, ask the user for the location */
+			std::string input;
+			do
+			{
+				std::cout << "\nPlease enter the absolute path to the .vcxproj file\n";
+				input = Utils::IO::ReadUserInput();
+			} while (input.find(".vcxproj") != std::string::npos);
+
+			vcxprojFilePath = input;
+		}
+
+		return vcxprojFilePath;
 	}
 
 	void DLLCreator::PrintDirectoryContents(const std::filesystem::directory_entry& entry)

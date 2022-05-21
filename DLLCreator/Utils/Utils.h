@@ -5,11 +5,14 @@
 #include <Windows.h> /* for ClearConsole() */
 
 #include <string> /* std::string */
+#include <memory> /* std::unique_ptr */
 
 namespace Utils
 {
 	namespace IO
 	{
+		unsigned char* operator ""_byte(const char* pString, size_t);
+
 		void ClearConsole();
 
 		bool ReadUserInput(const std::string& wantedInput);
