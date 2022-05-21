@@ -114,12 +114,12 @@ namespace Utils
 			assert(pString != nullptr);
 			assert(pOtherString != nullptr);
 
-			int stringLen = StringLength(pString, delimiter);
-			int otherStringLen = StringLength(pOtherString, delimiter);
+			size_t stringLen = StringLength(pString, delimiter);
+			size_t otherStringLen = StringLength(pOtherString, delimiter);
 
-			for (int i = 0; i <= stringLen - otherStringLen; ++i)
+			for (size_t i = 0; i <= stringLen - otherStringLen; ++i)
 			{
-				int j{};
+				size_t j{};
 				while (j < otherStringLen && pString[i + j] == pOtherString[j])
 				{
 					++j;
@@ -135,17 +135,17 @@ namespace Utils
 			return false;
 		}
 
-		bool StringContains(const BYTE* const pString, const BYTE* const pOtherString, const char delimiter)
+		bool StringContains(const BYTE* const pString, const BYTE* const pOtherString, const BYTE delimiter)
 		{
 			assert(pString != nullptr);
 			assert(pOtherString != nullptr);
 
-			int stringLen = StringLength(pString, delimiter);
-			int otherStringLen = StringLength(pOtherString, delimiter);
+			size_t stringLen = StringLength(pString, delimiter);
+			size_t otherStringLen = StringLength(pOtherString, delimiter);
 
-			for (int i = 0; i <= stringLen - otherStringLen; ++i)
+			for (size_t i = 0; i <= stringLen - otherStringLen; ++i)
 			{
-				int j{};
+				size_t j{};
 				while (j < otherStringLen && pString[i + j] == pOtherString[j])
 				{
 					++j;
@@ -172,7 +172,7 @@ namespace Utils
 			return counter;
 		}
 
-		size_t StringLength(const BYTE* const pString, const char delimiter)
+		size_t StringLength(const BYTE* const pString, const BYTE delimiter)
 		{
 			size_t counter{};
 			while (pString[counter] != delimiter)

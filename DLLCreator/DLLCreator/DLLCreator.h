@@ -32,5 +32,8 @@ namespace DLL
 		std::string APIMacro;
 		std::vector<std::filesystem::directory_entry> PathEntries;
 		std::vector<std::string> FilteredFilePaths;
+
+		constexpr inline static const unsigned long /* DWORD */ ExportMacroLength{7};
+		constexpr inline static const unsigned char /* BYTE */ ExportMacro[9]{"EXPORT;\n"};
 	};
 }

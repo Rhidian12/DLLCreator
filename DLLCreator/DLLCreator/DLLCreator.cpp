@@ -7,12 +7,15 @@
 #include <assert.h> /* assert() */
 #include <deque> /* std::deque */
 #include <memory> /* std::unique_ptr */
+#include <bitset> /* std::bitset */
 
 /* Windows specific includes */
 #include <fileapi.h> /* CreateFileA() */
 #include <errhandlingapi.h> /* GetLastError() */
 #include <handleapi.h> /* INVALID_HANDLE_VALUE */
 // #include <tchar.h> /* _tcscmp() */
+
+#undef max
 
 namespace DLL
 {
@@ -76,7 +79,12 @@ namespace DLL
 					path.find(".exe") != std::string::npos ||
 					path.find(".lib") != std::string::npos ||
 					path.find(".dll") != std::string::npos ||
-					path.find(".cpp") != std::string::npos;
+					path.find(".cpp") != std::string::npos ||
+					path.find(".vs") != std::string::npos ||
+					path.find("x64") != std::string::npos ||
+					path.find("Release") != std::string::npos ||
+					path.find("Debug") != std::string::npos ||
+					path.find("x86") != std::string::npos;
 			}), PathEntries.end());
 
 		/* Testing */
@@ -197,24 +205,20 @@ namespace DLL
 			/* \n is our delimiter */
 			if (pBuffer[i] == static_cast<BYTE>('\n'))
 			{
-				std::unique_ptr<char[]> pLine{ new char[i - previousIndex]{} };
-				assert(Utils::IO::StringCopy(pLine.get(), reinterpret_cast<const char*>(pBuffer.get()) + previousIndex, i - previousIndex) && "DLLCreator::DefinePreprocessorMacros() > String could not be copied!");
-				if (Utils::IO::StringContains(pLine.get(), "<PreprocessorDefinitions>\n", '\n'))
+				std::unique_ptr<BYTE[]> pLine{ new BYTE[i - previousIndex]{} };
+				assert(Utils::IO::StringCopy(pLine.get(), pBuffer.get() + previousIndex, i - previousIndex) && "DLLCreator::DefinePreprocessorMacros() > String could not be copied!");
+
+				if (Utils::IO::StringContains(pLine.get(), reinterpret_cast<const BYTE*>("<PreprocessorDefinitions>\n"), '\n'))
 				{
 					lineIndices.push_back(previousIndex);
 				}
-
-				// delete[] pLine;
 
 				previousIndex = i + 1;
 			}
 		}
 
-		constexpr DWORD exportLength{ 7 };
-		constexpr BYTE exportMacro[9]("EXPORT;\n");
-
 		/* Make a new buffer with the length of the vcxproj + the export macro added (amount of times as there are preprocesser definitions defined) */
-		const DWORD newBufferSize(fileSize + static_cast<DWORD>(lineIndices.size()) * exportLength);
+		const DWORD newBufferSize(fileSize + static_cast<DWORD>(lineIndices.size()) * ExportMacroLength);
 		std::unique_ptr<BYTE[]> pNewBuffer(new BYTE[newBufferSize]{});
 		for (DWORD i{}, newFileCounter{}; i < fileSize; ++i, ++newFileCounter)
 		{
@@ -232,9 +236,9 @@ namespace DLL
 				else
 				{
 					/* add macro to the buffer */
-					for (DWORD j{}; j < exportLength; ++j)
+					for (DWORD j{}; j < ExportMacroLength; ++j)
 					{
-						pNewBuffer[newFileCounter++] = exportMacro[j];
+						pNewBuffer[newFileCounter++] = ExportMacro[j];
 					}
 
 					pNewBuffer[newFileCounter] = static_cast<BYTE>('%');
@@ -243,7 +247,7 @@ namespace DLL
 
 					for (DWORD& elem : lineIndices)
 					{
-						elem += exportLength;
+						elem += ExportMacroLength;
 					}
 				}
 			}
@@ -267,11 +271,8 @@ namespace DLL
 		assert(WriteFile(testFile, pNewBuffer.get(), newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 		assert(CloseHandle(testFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
 #else
-		assert(WriteFile(vcxProjFile, pNewBuffer, newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+		assert(WriteFile(vcxProjFile, pNewBuffer.get(), newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 #endif
-
-		// delete[] pBuffer;
-		// delete[] pNewBuffer;
 
 		assert(CloseHandle(vcxProjFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
 	}
@@ -387,6 +388,7 @@ namespace DLL
 
 			Utils::IO::ClearConsole();
 
+			/* Print file contents */
 			for (DWORD i{}; i < readBytes; ++i)
 			{
 				std::cout << pBuffer[i];
@@ -394,8 +396,90 @@ namespace DLL
 
 			std::cout << "\n Should class be fully exported? Y/N >> ";
 
+			DWORD previousIndex{};
+			/* Just add the macro after the class declaration */
 			if (Utils::IO::ReadUserInput("Y"))
 			{
+				/* Make a new buffer with the length of the file + the macro + a space */
+				/* This should normally be fileSize + ExportMacroLength + 1, but we don't want to count the ; in the macro, so - 1 */
+				/* This -1 cancels out the + 1 */
+				const DWORD newBufferSize(fileSize + ExportMacroLength);
+				std::unique_ptr<BYTE[]> pNewBuffer(new BYTE[newBufferSize]{});
+
+				for (DWORD i{}, newFileCounter{}; i < fileSize; ++i, ++newFileCounter)
+				{
+					/* \n is our delimiter */
+					if (pBuffer[i] == static_cast<BYTE>('\n'))
+					{
+						std::unique_ptr<BYTE[]> pLine{ new BYTE[i - previousIndex]{} };
+						assert(Utils::IO::StringCopy(pLine.get(), (pBuffer.get()) + previousIndex, i - previousIndex) && "DLLCreator::DefinePreprocessorMacros() > String could not be copied!");
+
+						enum class ClassType : uint8_t
+						{
+							Class = 0,
+							Struct = 1
+						};
+						std::bitset<2> classFlag{};
+
+						if (Utils::IO::StringContains(pLine.get(), reinterpret_cast<const BYTE*>("class\n"), '\n'))
+						{
+							classFlag.set(static_cast<std::underlying_type_t<ClassType>>(ClassType::Class));
+						}
+						else if (Utils::IO::StringContains(pLine.get(), reinterpret_cast<const BYTE*>("struct\n"), '\n'))
+						{
+							classFlag.set(static_cast<std::underlying_type_t<ClassType>>(ClassType::Struct));
+						}
+
+						if (classFlag.any())
+						{
+							/* make sure we add the macro after the class/struct */
+							/* add macro to the buffer */
+
+							if (classFlag.test(static_cast<std::underlying_type_t<ClassType>>(ClassType::Class)))
+							{
+								const DWORD index{ Utils::IO::StringFind(pLine.get(), reinterpret_cast<const BYTE*>("class\n"), '\n') };
+
+								if (index != std::numeric_limits<DWORD>::max())
+								{
+									/* first write the class keyword still */
+									for (int j{}; j < Utils::IO::StringLength(pLine.get(), '\n') - index; ++j)
+									{
+										pNewBuffer[newFileCounter++] = pBuffer[i++];
+									}
+
+									/* add a space */
+									pNewBuffer[newFileCounter++] = static_cast<BYTE>(' ');
+
+									/* write the macro, without the ; */
+									for (DWORD j{}; j < ExportMacroLength - 1; ++j)
+									{
+										pNewBuffer[newFileCounter++] = ExportMacro[j];
+									}
+
+									/* add another space */
+									pNewBuffer[newFileCounter++] = static_cast<BYTE>(' ');
+
+									/* write the rest of the line */
+									for (size_t j{ index + strlen("class\0") + 2 }; j < Utils::IO::StringLength(pLine.get(), '\n'); ++j)
+									{
+										pNewBuffer[newFileCounter++] = pBuffer[i++];
+									}
+								}
+							}
+							else
+							{
+
+							}
+						}
+
+						previousIndex = i + 1;
+					}
+				}
+			}
+			else
+			{
+				std::cout << "\n What functions should be exported? Print the numbers. E.g. 0,1,3,5. Write NONE if no functions should be converted\n";
+
 
 			}
 		}

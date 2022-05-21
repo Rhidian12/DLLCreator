@@ -20,10 +20,10 @@ namespace Utils
 		int StringCompare(const BYTE* const pString, const BYTE* const pOtherString, const char delimiter);
 		
 		bool StringContains(const char* const pString, const char* const pOtherString, const char delimiter);
-		bool StringContains(const BYTE* const pString, const BYTE* const pOtherString, const char delimiter);
+		bool StringContains(const BYTE* const pString, const BYTE* const pOtherString, const BYTE delimiter);
 
 		size_t StringLength(const char* const pString, const char delimiter);
-		size_t StringLength(const BYTE* const pString, const char delimiter);
+		size_t StringLength(const BYTE* const pString, const BYTE delimiter);
 
 		bool StringCopy(char* pDest, const char* pSource, const size_t count);
 		bool StringCopy(BYTE* pDest, const BYTE* pSource, const size_t count);
