@@ -188,7 +188,7 @@ namespace DLL
 				}
 			}
 
-			previousNewLine = nextNewLine + 2;
+			previousNewLine = nextNewLine + 1;
 		}
 #if 0
 		/* Parse the buffer, searching for preprocessor definitions */
@@ -412,9 +412,11 @@ namespace DLL
 			/* Print file contents */
 			std::cout << fileContents.c_str();
 
-			std::cout << "\n Should class be fully exported? Y/N >> ";
+			std::cout << "\nShould class be fully exported? Y/N >> ";
 
 			const size_t count = std::count(fileContents.cbegin(), fileContents.cend(), '\n');
+
+			std::cout << "\n--------------\n";
 
 			size_t previousNewLine{};
 			/* Just add the macro after the class declaration */
@@ -422,8 +424,10 @@ namespace DLL
 			{
 				for (size_t i{}; i < count; ++i)
 				{
-					const size_t nextNewLine(fileContents.find('\n', previousNewLine));
+					size_t nextNewLine(fileContents.find('\n', previousNewLine));
 					const std::basic_string<BYTE> line(fileContents.substr(previousNewLine, nextNewLine + 1 - previousNewLine));
+
+					// std::cout << line.c_str();
 
 					enum class ClassType : uint8_t
 					{
@@ -454,28 +458,39 @@ namespace DLL
 
 						/* make sure we add the macro after the class/struct */
 						/* add macro to the buffer */
+						{
+							using namespace Utils;
+							using namespace IO;
 
-						if (classFlag.test(static_cast<std::underlying_type_t<ClassType>>(ClassType::Class)))
-						{
-							/* + 5 == length of 'class' */
-							fileContents.insert(classTypeIndex + 5, APIMacro);
-						}
-						else
-						{
-							/* + 6 == length of 'struct' */
-							fileContents.insert(classTypeIndex + 6, APIMacro);
+							if (classFlag.test(static_cast<std::underlying_type_t<ClassType>>(ClassType::Class)))
+							{
+								/* + 5 == length of 'class' */
+								constexpr size_t classLen{ 6 };
+								fileContents.insert(previousNewLine + classTypeIndex + classLen, " "_byte + APIMacro);
+								nextNewLine += classLen + 1;
+							}
+							else
+							{
+								/* + 6 == length of 'struct' */
+								constexpr size_t structLen{ 6 };
+								fileContents.insert(previousNewLine + classTypeIndex + structLen, " "_byte + APIMacro);
+								nextNewLine += structLen + 1;
+							}
 						}
 					}
 
-					previousNewLine = nextNewLine + 2;
+					previousNewLine = nextNewLine + 1;
 				}
 			}
 			else
 			{
 				std::cout << "\n What functions should be exported? Print the numbers. E.g. 0,1,3,5. Write NONE if no functions should be converted\n";
 
-
+				/* Get all functions from a file */
 			}
+
+			Utils::IO::ClearConsole();
+			std::cout << fileContents.c_str() << "\n";
 		}
 	}
 
