@@ -25,8 +25,6 @@ namespace DLL
 
 	void DLLCreator::Convert()
 	{
-		std::basic_string<BYTE> test;
-
 		/* [TODO]: Do all of this with Qt */
 
 		/* Step 1: Get all folders and files in this root directory */
@@ -42,7 +40,7 @@ namespace DLL
 		CreateAPIFile();
 
 		/* Step 5: Go through every filtered header file and start adding the include and the generated macro */
-		// AddMacroToFilteredHeaderFiles();
+		AddMacroToFilteredHeaderFiles();
 	}
 
 	void DLLCreator::GetAllFilesAndDirectories()
@@ -281,12 +279,10 @@ namespace DLL
 
 		assert(testFile != INVALID_HANDLE_VALUE);
 
-		// assert(WriteFile(testFile, pNewBuffer.get(), newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
-		// assert(WriteFile(testFile, pNewBuffer.get(), newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 		assert(WriteFile(testFile, fileContents.data(), fileContents.size(), &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 		assert(CloseHandle(testFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
 #else
-		assert(WriteFile(vcxProjFile, pNewBuffer.get(), newBufferSize, &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+		assert(WriteFile(testFile, fileContents.data(), fileContents.size(), &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 #endif
 
 		assert(CloseHandle(vcxProjFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
