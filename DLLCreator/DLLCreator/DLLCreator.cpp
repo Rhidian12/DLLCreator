@@ -20,7 +20,7 @@
 namespace DLL
 {
 	DLLCreator::DLLCreator(const std::string& rootPath)
-		: RootPath(rootPath)
+		: RootPath(Utils::IO::ConvertToByteString(rootPath))
 	{}
 
 	void DLLCreator::Convert()
@@ -46,7 +46,7 @@ namespace DLL
 	void DLLCreator::GetAllFilesAndDirectories()
 	{
 		/* Step 1 */
-		const std::filesystem::path path(RootPath);
+		const std::filesystem::path path(Utils::IO::ConvertToRegularString(RootPath));
 
 		for (const auto& entry : std::filesystem::directory_iterator(path))
 		{
@@ -176,7 +176,7 @@ namespace DLL
 				using namespace Utils;
 				using namespace IO;
 
-				if (line.find(std::unique_ptr<unsigned char[]>("<PreprocessorDefinitions>"_byte).get()) != std::string::npos)
+				if (line.find("<PreprocessorDefinitions>"_byte) != std::string::npos)
 				{
 					std::cout << line.c_str();
 
@@ -254,7 +254,7 @@ namespace DLL
 
 		for (size_t i{}; i < charPositions.size();)
 		{
-			fileContents.insert(charPositions[i], ExportMacro);
+			fileContents.insert(charPositions[i], PreproExportMacro);
 
 			for (size_t j{ i }; j < charPositions.size(); ++j)
 			{
@@ -279,7 +279,7 @@ namespace DLL
 
 		assert(testFile != INVALID_HANDLE_VALUE);
 
-		assert(WriteFile(testFile, fileContents.data(), fileContents.size(), &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+		assert(WriteFile(testFile, fileContents.data(), static_cast<DWORD>(fileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 		assert(CloseHandle(testFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
 #else
 		assert(WriteFile(testFile, fileContents.data(), fileContents.size(), &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
@@ -290,8 +290,11 @@ namespace DLL
 
 	void DLLCreator::CreateAPIFile()
 	{
+		using namespace Utils;
+		using namespace IO;
+
 		/* Make the API file in the Root Directory */
-		std::string api{};
+		std::basic_string<BYTE> api{};
 
 		/* Make sure there is no file already with the apiFileName */
 		int counter{};
@@ -299,22 +302,22 @@ namespace DLL
 		do
 		{
 			api = RootPath.substr(RootPath.find_last_of('\\') + 1, RootPath.size() - RootPath.find_last_of('\\')) +
-				"_API";
+				"_API"_byte;
 
 			const auto cIt(std::find_if(PathEntries.cbegin(), PathEntries.cend(), [&api](const std::filesystem::directory_entry& entry)
 				{
-					return entry.path().string().find(api) != std::string::npos;
+					return ConvertToByteString(entry.path().string()).find(api) != std::string::npos;
 				}));
 
 			/* The file already exists, ask the user if it can be overwritten */
 			if (cIt != PathEntries.cend())
 			{
-				Utils::IO::ClearConsole();
+				ClearConsole();
 
-				std::cout << "The file: " << api <<
+				std::cout << "The file: " << api.c_str() <<
 					" already exists, but the program wants to use this name. Can the file be overwritten? Y/N >> ";
 
-				if (Utils::IO::ReadUserInput("Y"))
+				if (ReadUserInput("Y"))
 				{
 					bShouldLoop = false;
 				}
@@ -322,11 +325,11 @@ namespace DLL
 				{
 					if (counter > 0)
 					{
-						api.append("_CUSTOMTOOL" + std::to_string(0));
+						api.append("_CUSTOMTOOL"_byte.append(ConvertToByteString(std::to_string(0))));
 					}
 					else
 					{
-						api.append("_CUSTOMTOOL");
+						api.append("_CUSTOMTOOL"_byte);
 					}
 				}
 			}
@@ -337,12 +340,17 @@ namespace DLL
 		} while (bShouldLoop);
 
 		APIMacro = api;
-		APIFileName = api.append(".h");
-		APIFileNamePath = RootPath + "\\" + APIFileName;
+
+		{ /* Scope-lock using directives */
+			using namespace Utils;
+			using namespace IO;
+			APIFileName = api.append(".h"_byte);
+			APIFileNamePath = RootPath + "\\"_byte + APIFileName;
+		}
 
 		/* Now open the actual file and write the contents */
 		HANDLE apiFile(
-			CreateFileA(APIFileNamePath.c_str(),
+			CreateFileA(ConvertToRegularString(APIFileNamePath).c_str(),
 				GENERIC_WRITE,
 				FILE_SHARE_WRITE,
 				nullptr,
@@ -353,17 +361,17 @@ namespace DLL
 
 		assert(apiFile != INVALID_HANDLE_VALUE);
 
-		const std::string apiContents(
-			std::string("#pragma once\n\n") +
-			std::string("#ifdef _WIN32\n") +
-			std::string("\t#ifdef EXPORT\n") +
-			std::string("\t\t#define ") + APIMacro + " __declspec(dllexport)\n" +
-			std::string("\t#else\n") +
-			std::string("\t\t#define ") + APIMacro + " __declspec(dllimport)\n" +
-			std::string("\t#endif\n") +
-			std::string("#else\n") +
-			std::string("\t#define ") + APIMacro + "\n" +
-			std::string("#endif"));
+		const std::basic_string<BYTE> apiContents(
+			std::basic_string<BYTE>("#pragma once\n\n"_byte) +
+			std::basic_string<BYTE>("#ifdef _WIN32\n"_byte) +
+			std::basic_string<BYTE>("\t#ifdef EXPORT\n"_byte) +
+			std::basic_string<BYTE>("\t\t#define "_byte) + APIMacro + " __declspec(dllexport)\n"_byte +
+			std::basic_string<BYTE>("\t#else\n"_byte) +
+			std::basic_string<BYTE>("\t\t#define "_byte) + APIMacro + " __declspec(dllimport)\n"_byte +
+			std::basic_string<BYTE>("\t#endif\n"_byte) +
+			std::basic_string<BYTE>("#else\n"_byte) +
+			std::basic_string<BYTE>("\t#define "_byte) + APIMacro + "\n"_byte +
+			std::basic_string<BYTE>("#endif"_byte));
 
 		DWORD bytesWritten{};
 		assert(WriteFile(apiFile, apiContents.c_str(), static_cast<DWORD>(apiContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::CreateAPIFile() > The API file could not be written to!");
@@ -390,101 +398,76 @@ namespace DLL
 
 			assert(header != INVALID_HANDLE_VALUE);
 
+			std::basic_string<BYTE> fileContents{};
+
 			/* Read the file into a buffer */
 			const DWORD fileSize(GetFileSize(header, nullptr));
+			fileContents.resize(fileSize);
 
-			std::unique_ptr<BYTE[]> pBuffer(new BYTE[fileSize]{});
 			DWORD readBytes{};
-			assert(ReadFile(header, pBuffer.get(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > File could not be read!");
+			assert(ReadFile(header, fileContents.data(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > File could not be read!");
 
 			Utils::IO::ClearConsole();
 
 			/* Print file contents */
-			for (DWORD i{}; i < readBytes; ++i)
-			{
-				std::cout << pBuffer[i];
-			}
+			std::cout << fileContents.c_str();
 
 			std::cout << "\n Should class be fully exported? Y/N >> ";
 
-			DWORD previousIndex{};
+			const size_t count = std::count(fileContents.cbegin(), fileContents.cend(), '\n');
+
+			size_t previousNewLine{};
 			/* Just add the macro after the class declaration */
 			if (Utils::IO::ReadUserInput("Y"))
 			{
-				/* Make a new buffer with the length of the file + the macro + a space */
-				/* This should normally be fileSize + ExportMacroLength + 1, but we don't want to count the ; in the macro, so - 1 */
-				/* This -1 cancels out the + 1 */
-				const DWORD newBufferSize(fileSize + ExportMacroLength);
-				std::unique_ptr<BYTE[]> pNewBuffer(new BYTE[newBufferSize]{});
-
-				for (DWORD i{}, newFileCounter{}; i < fileSize; ++i, ++newFileCounter)
+				for (size_t i{}; i < count; ++i)
 				{
-					/* \n is our delimiter */
-					if (pBuffer[i] == static_cast<BYTE>('\n'))
+					const size_t nextNewLine(fileContents.find('\n', previousNewLine));
+					const std::basic_string<BYTE> line(fileContents.substr(previousNewLine, nextNewLine + 1 - previousNewLine));
+
+					enum class ClassType : uint8_t
 					{
-						std::unique_ptr<BYTE[]> pLine{ new BYTE[i - previousIndex]{} };
-						assert(Utils::IO::StringCopy(pLine.get(), (pBuffer.get()) + previousIndex, i - previousIndex) && "DLLCreator::DefinePreprocessorMacros() > String could not be copied!");
+						Class = 0,
+						Struct = 1
+					};
+					std::bitset<2> classFlag{};
 
-						enum class ClassType : uint8_t
-						{
-							Class = 0,
-							Struct = 1
-						};
-						std::bitset<2> classFlag{};
+					size_t classTypeIndex{};
 
-						if (Utils::IO::StringContains(pLine.get(), reinterpret_cast<const BYTE*>("class\n"), '\n'))
+					{ /* Scope-lock using directives */
+						using namespace Utils;
+						using namespace IO;
+
+						if (classTypeIndex = line.find("class"_byte); classTypeIndex != std::string::npos)
 						{
 							classFlag.set(static_cast<std::underlying_type_t<ClassType>>(ClassType::Class));
 						}
-						else if (Utils::IO::StringContains(pLine.get(), reinterpret_cast<const BYTE*>("struct\n"), '\n'))
+						else if (classTypeIndex = line.find("struct"_byte); classTypeIndex != std::string::npos)
 						{
 							classFlag.set(static_cast<std::underlying_type_t<ClassType>>(ClassType::Struct));
 						}
-
-						if (classFlag.any())
-						{
-							/* make sure we add the macro after the class/struct */
-							/* add macro to the buffer */
-
-							if (classFlag.test(static_cast<std::underlying_type_t<ClassType>>(ClassType::Class)))
-							{
-								const DWORD index{ Utils::IO::StringFind(pLine.get(), reinterpret_cast<const BYTE*>("class\n"), '\n') };
-
-								if (index != std::numeric_limits<DWORD>::max())
-								{
-									/* first write the class keyword still */
-									for (int j{}; j < Utils::IO::StringLength(pLine.get(), '\n') - index; ++j)
-									{
-										pNewBuffer[newFileCounter++] = pBuffer[i++];
-									}
-
-									/* add a space */
-									pNewBuffer[newFileCounter++] = static_cast<BYTE>(' ');
-
-									/* write the macro, without the ; */
-									for (DWORD j{}; j < ExportMacroLength - 1; ++j)
-									{
-										pNewBuffer[newFileCounter++] = ExportMacro[j];
-									}
-
-									/* add another space */
-									pNewBuffer[newFileCounter++] = static_cast<BYTE>(' ');
-
-									/* write the rest of the line */
-									for (size_t j{ index + strlen("class\0") + 2 }; j < Utils::IO::StringLength(pLine.get(), '\n'); ++j)
-									{
-										pNewBuffer[newFileCounter++] = pBuffer[i++];
-									}
-								}
-							}
-							else
-							{
-
-							}
-						}
-
-						previousIndex = i + 1;
 					}
+
+					if (classFlag.any())
+					{
+						assert(classTypeIndex != std::string::npos && "DLLCreator::AddMacroToFilteredHeaderFiles() > struct/class could not be found!");
+
+						/* make sure we add the macro after the class/struct */
+						/* add macro to the buffer */
+
+						if (classFlag.test(static_cast<std::underlying_type_t<ClassType>>(ClassType::Class)))
+						{
+							/* + 5 == length of 'class' */
+							fileContents.insert(classTypeIndex + 5, APIMacro);
+						}
+						else
+						{
+							/* + 6 == length of 'struct' */
+							fileContents.insert(classTypeIndex + 6, APIMacro);
+						}
+					}
+
+					previousNewLine = nextNewLine + 2;
 				}
 			}
 			else

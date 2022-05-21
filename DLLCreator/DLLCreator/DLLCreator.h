@@ -27,14 +27,14 @@ namespace DLL
 		void PrintDirectoryContents(const std::filesystem::directory_entry& entry);
 		std::vector<size_t> GetNumbersFromCSVString(const std::string& userInput) const;
 
-		std::string RootPath;
-		std::string APIFileName;
-		std::string APIFileNamePath;
-		std::string APIMacro;
+		std::basic_string<unsigned char /* BYTE */> RootPath;
+		std::basic_string<unsigned char /* BYTE */> APIFileName;
+		std::basic_string<unsigned char /* BYTE */> APIFileNamePath;
+		std::basic_string<unsigned char /* BYTE */> APIMacro;
 		std::vector<std::filesystem::directory_entry> PathEntries;
 		std::vector<std::string> FilteredFilePaths;
 
 		constexpr inline static const unsigned long /* DWORD */ ExportMacroLength{7};
-		constexpr inline static const unsigned char /* BYTE */ ExportMacro[ExportMacroLength + 1]{"EXPORT;"};
+		constexpr inline static const unsigned char /* BYTE */ PreproExportMacro[ExportMacroLength + 1]{"EXPORT;"};
 	};
 }

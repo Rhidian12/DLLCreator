@@ -9,11 +9,17 @@ namespace Utils
 {
 	namespace IO
 	{
-		unsigned char* operator""_byte(const char* pString, size_t size)
+		std::basic_string<unsigned char /* BYTE */> operator""_byte(const char* pString, size_t size)
 		{
-			unsigned char* pNewString(new BYTE[size + 1]);
-			strcpy_s(reinterpret_cast<char*>(pNewString), size + 1, pString);
-			return pNewString;
+			std::basic_string<unsigned char /* BYTE */> s{};
+			s.reserve(size);
+
+			for (size_t i{}; i < size; ++i)
+			{
+				s.push_back(pString[i]);
+			}
+			
+			return s;
 		}
 
 		std::string ConvertToRegularString(const std::basic_string<unsigned char>& string)
