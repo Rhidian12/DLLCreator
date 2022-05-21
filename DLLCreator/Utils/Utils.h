@@ -13,6 +13,9 @@ namespace Utils
 	{
 		unsigned char* operator ""_byte(const char* pString, size_t);
 
+		std::string ConvertToRegularString(const std::basic_string<unsigned char /* BYTE */>& string);
+		std::basic_string<unsigned char /* BYTE */> ConvertToByteString(const std::string& string);
+
 		void ClearConsole();
 
 		bool ReadUserInput(const std::string& wantedInput);

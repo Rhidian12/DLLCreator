@@ -16,6 +16,32 @@ namespace Utils
 			return pNewString;
 		}
 
+		std::string ConvertToRegularString(const std::basic_string<unsigned char>& string)
+		{
+			std::string s{};
+			s.reserve(string.size());
+
+			for (const unsigned char c : string)
+			{
+				s.push_back(static_cast<char>(c));
+			}
+
+			return s;
+		}
+
+		std::basic_string<unsigned char /* BYTE */> ConvertToByteString(const std::string& string)
+		{
+			std::basic_string<unsigned char /* BYTE */> s{};
+			s.reserve(string.size());
+
+			for (const char c : string)
+			{
+				s.push_back(static_cast<unsigned char>(c));
+			}
+
+			return s;
+		}
+
 		/* Reference: https://stackoverflow.com/questions/5866529/how-do-we-clear-the-console-in-assembly/5866648#5866648 */
 		/* MSDN: https://docs.microsoft.com/en-us/windows/console/scrolling-a-screen-buffer-s-contents */
 		void ClearConsole()
