@@ -8,6 +8,7 @@
 #include <deque> /* std::deque */
 #include <memory> /* std::unique_ptr */
 #include <bitset> /* std::bitset */
+#include <regex>
 
 /* Windows specific includes */
 #include <fileapi.h> /* CreateFileA() */
@@ -427,8 +428,6 @@ namespace DLL
 					size_t nextNewLine(fileContents.find('\n', previousNewLine));
 					const std::basic_string<BYTE> line(fileContents.substr(previousNewLine, nextNewLine + 1 - previousNewLine));
 
-					// std::cout << line.c_str();
-
 					enum class ClassType : uint8_t
 					{
 						Class = 0,
@@ -484,9 +483,30 @@ namespace DLL
 			}
 			else
 			{
-				std::cout << "\n What functions should be exported? Print the numbers. E.g. 0,1,3,5. Write NONE if no functions should be converted\n";
+				std::cout << "\nWhat functions should be exported? Print the numbers. E.g. 0,1,3,5. Write NONE if no functions should be converted\n";
 
 				/* Get all functions from a file */
+				/* [CRINGE]: This is way too simple at the moment, complicated files containing templates and comments will not be parsed correctly */
+				const std::regex functionFinder{ "\\s*((?:\\w*(?:[:]{2})*)\\s*\\w*\\s*\\w*[&*]{0,2}\\s*\\w+\\(.*\\))" };
+
+				std::smatch matches{};
+
+				std::string convertedFileContents(Utils::IO::ConvertToRegularString(fileContents));
+				size_t counter{};
+				while (std::regex_search(convertedFileContents, matches, functionFinder)) /* Temp strings are not allowed */
+				{
+					std::string match(matches.str());
+					match.erase(match.begin(), std::find_if(match.begin(), match.end(), [](const char c)->bool
+						{
+							return !std::isspace(c);
+						}));
+
+					std::cout << std::to_string(counter++) << ". " << match << "\n";
+
+					convertedFileContents = matches.suffix();
+				}
+
+				std::vector<size_t> selectedFunctions(GetNumbersFromCSVString(Utils::IO::ReadUserInput()));
 			}
 
 			Utils::IO::ClearConsole();
