@@ -362,6 +362,9 @@ namespace DLL
 
 		assert(apiFile != INVALID_HANDLE_VALUE);
 
+		SetFilePointer(apiFile, 0, nullptr, FILE_BEGIN);
+		SetEndOfFile(apiFile);
+
 		const std::basic_string<BYTE> apiContents(
 			std::basic_string<BYTE>("#pragma once\n\n"_byte) +
 			std::basic_string<BYTE>("#ifdef _WIN32\n"_byte) +
@@ -569,6 +572,9 @@ namespace DLL
 			);
 
 			assert(newHeader != INVALID_HANDLE_VALUE);
+
+			SetFilePointer(newHeader, 0, nullptr, FILE_BEGIN);
+			SetEndOfFile(newHeader);
 
 			DWORD bytesWritten{};
 			assert(WriteFile(newHeader, fileContents.c_str(), static_cast<DWORD>(fileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > The new header file could not be written to!");
