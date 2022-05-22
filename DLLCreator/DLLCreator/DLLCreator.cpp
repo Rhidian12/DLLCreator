@@ -382,6 +382,10 @@ namespace DLL
 
 	void DLLCreator::AddMacroToFilteredHeaderFiles()
 	{
+		using namespace Utils;
+		using namespace IO;
+
+		int fileCounter{};
 		for (const std::string& entry : FilteredFilePaths)
 		{
 			/* print file contents */
@@ -408,7 +412,7 @@ namespace DLL
 			DWORD readBytes{};
 			assert(ReadFile(header, fileContents.data(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > File could not be read!");
 
-			Utils::IO::ClearConsole();
+			ClearConsole();
 
 			/* Print file contents */
 			std::cout << fileContents.c_str();
@@ -421,7 +425,7 @@ namespace DLL
 
 			size_t previousNewLine{};
 			/* Just add the macro after the class declaration */
-			if (Utils::IO::ReadUserInput("Y"))
+			if (ReadUserInput("Y"))
 			{
 				for (size_t i{}; i < count; ++i)
 				{
@@ -464,7 +468,7 @@ namespace DLL
 							if (classFlag.test(static_cast<std::underlying_type_t<ClassType>>(ClassType::Class)))
 							{
 								/* + 5 == length of 'class' */
-								constexpr size_t classLen{ 6 };
+								constexpr size_t classLen{ 5 };
 								fileContents.insert(previousNewLine + classTypeIndex + classLen, " "_byte + APIMacro);
 								nextNewLine += classLen + 1;
 							}
@@ -476,6 +480,8 @@ namespace DLL
 								nextNewLine += structLen + 1;
 							}
 						}
+
+						break;
 					}
 
 					previousNewLine = nextNewLine + 1;
@@ -490,6 +496,7 @@ namespace DLL
 				const std::regex functionFinder{ "\\s*((?:\\w*(?:[:]{2})*)\\s*\\w*\\s*\\w*[&*]{0,2}\\s*\\w+\\(.*\\))" };
 
 				std::smatch matches{};
+				std::vector<std::string> functions{};
 
 				std::string convertedFileContents(Utils::IO::ConvertToRegularString(fileContents));
 				size_t counter{};
@@ -501,16 +508,73 @@ namespace DLL
 							return !std::isspace(c);
 						}));
 
+					/* store the function for later */
+					functions.push_back(match);
+
+					/* Print the function */
 					std::cout << std::to_string(counter++) << ". " << match << "\n";
 
 					convertedFileContents = matches.suffix();
 				}
 
-				std::vector<size_t> selectedFunctions(GetNumbersFromCSVString(Utils::IO::ReadUserInput()));
+				const std::string input(Utils::IO::ReadUserInput());
+
+				if (input != "NONE")
+				{
+					const std::vector<size_t> selectedFunctions(GetNumbersFromCSVString(input));
+
+					for (const size_t i : selectedFunctions)
+					{
+						if (i < functions.size())
+						{
+							/* insert the macro before this function */
+							fileContents.insert(fileContents.find(ConvertToByteString(functions[i])), APIMacro + " "_byte);
+						}
+					}
+				}
 			}
 
-			Utils::IO::ClearConsole();
-			std::cout << fileContents.c_str() << "\n";
+			/* We also need to add the include to the API file */
+			const size_t directoriesDeep(GetNumberOfDirectoriesDeep(entry));
+			std::basic_string<BYTE> include{ "#include "_byte };
+
+			for (size_t i{}; i < directoriesDeep; ++i)
+			{
+				include.append("../"_byte);
+			}
+
+			include.append(APIFileName);
+
+			const std::basic_string<BYTE> pragmaOnce("#pragma once"_byte);
+			/* Check if the file contains a #pragma once */
+			if (size_t pragmaPos = fileContents.find(pragmaOnce); pragmaPos != std::string::npos)
+			{
+				fileContents.insert(pragmaPos + pragmaOnce.size() + 1, include);
+			}
+			else
+			{
+				/* just insert at the top of the file */
+				fileContents.insert(0, include);
+			}
+
+			/* open the altered header */
+			HANDLE newHeader(
+				CreateFileA((std::string("Test") + std::to_string(fileCounter++) + ".txt").c_str(),
+					GENERIC_WRITE,
+					FILE_SHARE_WRITE,
+					nullptr,
+					OPEN_ALWAYS,
+					FILE_ATTRIBUTE_NORMAL,
+					nullptr)
+			);
+
+			assert(newHeader != INVALID_HANDLE_VALUE);
+
+			DWORD bytesWritten{};
+			assert(WriteFile(newHeader, fileContents.c_str(), static_cast<DWORD>(fileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > The new header file could not be written to!");
+			assert(CloseHandle(newHeader) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > Handle to file could not be closed!");
+
+			assert(CloseHandle(header) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > Handle to file could not be closed!");
 		}
 	}
 
@@ -579,6 +643,30 @@ namespace DLL
 				/* Directories => Files */
 				//return static_cast<int>(a.is_directory()) > static_cast<int>(b.is_directory());
 			});
+
+		/* Exclude certain files we know should not be converted already */
+		entries.erase(std::remove_if(entries.begin(), entries.end(), [](const std::filesystem::directory_entry& entry)
+			{
+				const std::string path(entry.path().string());
+
+				return path.find(".sln") != std::string::npos ||
+					path.find(".vcxproj.user") != std::string::npos ||
+					path.find(".vcxproj.filters") != std::string::npos ||
+					path.find(".rar") != std::string::npos ||
+					path.find(".zip") != std::string::npos ||
+					path.find(".txt") != std::string::npos ||
+					path.find(".props") != std::string::npos ||
+					path.find(".bin") != std::string::npos ||
+					path.find(".exe") != std::string::npos ||
+					path.find(".lib") != std::string::npos ||
+					path.find(".dll") != std::string::npos ||
+					path.find(".cpp") != std::string::npos ||
+					path.find(".vs") != std::string::npos ||
+					path.find("x64") != std::string::npos ||
+					path.find("Release") != std::string::npos ||
+					path.find("Debug") != std::string::npos ||
+					path.find("x86") != std::string::npos;
+			}), entries.end());
 
 		bool bAreFilesPresent(false), bAreDirectoriesPresent(false);
 		/* Print everything inside of this directory */
@@ -668,5 +756,13 @@ namespace DLL
 		}
 
 		return numbers;
+	}
+
+	size_t DLLCreator::GetNumberOfDirectoriesDeep(const std::string& filePath) const
+	{
+		const size_t countRootPath(std::count(RootPath.cbegin(), RootPath.cend(), '\\'));
+		const size_t countOtherPath(std::count(filePath.cbegin(), filePath.cend(), '\\'));
+
+		return countOtherPath - countRootPath;
 	}
 }

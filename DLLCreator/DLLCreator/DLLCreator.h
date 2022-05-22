@@ -26,6 +26,7 @@ namespace DLL
 		std::string FindVcxprojFilePath() const;
 		void PrintDirectoryContents(const std::filesystem::directory_entry& entry);
 		std::vector<size_t> GetNumbersFromCSVString(const std::string& userInput) const;
+		size_t GetNumberOfDirectoriesDeep(const std::string& filePath) const;
 
 		std::basic_string<unsigned char /* BYTE */> RootPath;
 		std::basic_string<unsigned char /* BYTE */> APIFileName;
