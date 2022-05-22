@@ -22,7 +22,10 @@ namespace DLL
 {
 	DLLCreator::DLLCreator(const std::string& rootPath)
 		: RootPath(Utils::IO::ConvertToByteString(rootPath))
-	{}
+		, ProjectName(Utils::IO::ConvertToByteString(rootPath))
+	{
+		ProjectName = ProjectName.substr(ProjectName.find_last_of('\\') + 1, ProjectName.size() - ProjectName.find_last_of('\\'));
+	}
 
 	void DLLCreator::Convert()
 	{
@@ -42,6 +45,9 @@ namespace DLL
 
 		/* Step 5: Go through every filtered header file and start adding the include and the generated macro */
 		AddMacroToFilteredHeaderFiles();
+
+		/* Step 6: Now that the macro and include has been added, generate CMake files */
+		GenerateCMakeFiles();
 	}
 
 	void DLLCreator::GetAllFilesAndDirectories()
@@ -582,6 +588,89 @@ namespace DLL
 
 			assert(CloseHandle(header) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > Handle to file could not be closed!");
 		}
+	}
+
+	void DLLCreator::GenerateCMakeFiles()
+	{
+		/* First generate the Root CMake file */
+		GenerateRootCMakeFile();
+
+		/* Now generate the sub directory CMake files */
+
+	}
+
+	void DLLCreator::GenerateRootCMakeFile()
+	{
+		using namespace Utils;
+		using namespace IO;
+
+		/* open the preset file */
+		HANDLE cmakeRootPresetFile(
+			CreateFileA("Resources/CMakeRootPreset.txt",
+				GENERIC_READ,
+				FILE_SHARE_READ,
+				nullptr,
+				OPEN_EXISTING,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
+
+		assert(cmakeRootPresetFile != INVALID_HANDLE_VALUE);
+
+		std::basic_string<BYTE> fileContents{};
+
+		/* Read the file into a buffer */
+		const DWORD fileSize(GetFileSize(cmakeRootPresetFile, nullptr));
+		fileContents.resize(fileSize);
+
+		DWORD readBytes{};
+		assert(ReadFile(cmakeRootPresetFile, fileContents.data(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::GenerateRootCMakeFile() > File could not be read!");
+		assert(CloseHandle(cmakeRootPresetFile) != 0 && "DLLCreator::GenerateRootCMakeFile() > Handle to file could not be closed!");
+
+		std::string convertedFileContents(ConvertToRegularString(fileContents));
+		
+		/* Substitute the version in */
+		const std::regex versionMajorRegex("<VERSION_MAJOR>");
+		const std::regex versionMinorRegex("<VERSION_MINOR>");
+		const std::regex projectNameRegex("<PROJECT_NAME>");
+
+		convertedFileContents = std::regex_replace(convertedFileContents, versionMajorRegex, "3");
+		convertedFileContents = std::regex_replace(convertedFileContents, versionMinorRegex, "10");
+		convertedFileContents = std::regex_replace(convertedFileContents, projectNameRegex, ConvertToRegularString(ProjectName));
+
+		/* Spacing */
+		convertedFileContents.append("\n");
+
+		/* Loop over all sub directories, and add them as sub directories */
+		for (const std::filesystem::directory_entry& subD : PathEntries)
+		{
+			if (subD.is_directory())
+			{
+				const std::string path(subD.path().string());
+				convertedFileContents.append(std::string("\nadd_subdirectory(") +
+					path.substr(path.find_last_of('\\') + 1, path.size() - path.find_last_of('\\')) + ")");
+			}
+		}
+
+		/* make a new root file */
+		HANDLE cmakeRootFile(
+			CreateFileA((ConvertToRegularString(RootPath) + "\\CMakeLists.txt").c_str(),
+				GENERIC_WRITE,
+				FILE_SHARE_WRITE,
+				nullptr,
+				OPEN_ALWAYS,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
+
+		assert(cmakeRootFile != INVALID_HANDLE_VALUE);
+
+		SetFilePointer(cmakeRootFile, 0, nullptr, FILE_BEGIN);
+		SetEndOfFile(cmakeRootFile);
+
+		DWORD bytesWritten{};
+		assert(WriteFile(cmakeRootFile, convertedFileContents.c_str(), static_cast<DWORD>(convertedFileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > The new header file could not be written to!");
+		assert(CloseHandle(cmakeRootFile) != 0 && "DLLCreator::GenerateRootCMakeFile() > Handle to file could not be closed!");
 	}
 
 	std::string DLLCreator::FindVcxprojFilePath() const

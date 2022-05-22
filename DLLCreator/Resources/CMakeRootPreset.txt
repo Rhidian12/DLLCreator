@@ -1,0 +1,3 @@
+cmake_minimum_required(VERSION <VERSION_MAJOR>.<VERSION_MINOR>)
+
+project(<PROJECT_NAME>)

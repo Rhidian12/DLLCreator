@@ -22,6 +22,8 @@ namespace DLL
 		void DefinePreprocessorMacro();
 		void CreateAPIFile();
 		void AddMacroToFilteredHeaderFiles();
+		void GenerateCMakeFiles();
+		void GenerateRootCMakeFile();
 
 		std::string FindVcxprojFilePath() const;
 		void PrintDirectoryContents(const std::filesystem::directory_entry& entry);
@@ -29,6 +31,7 @@ namespace DLL
 		size_t GetNumberOfDirectoriesDeep(const std::string& filePath) const;
 
 		std::basic_string<unsigned char /* BYTE */> RootPath;
+		std::basic_string<unsigned char /* BYTE */> ProjectName;
 		std::basic_string<unsigned char /* BYTE */> APIFileName;
 		std::basic_string<unsigned char /* BYTE */> APIFileNamePath;
 		std::basic_string<unsigned char /* BYTE */> APIMacro;

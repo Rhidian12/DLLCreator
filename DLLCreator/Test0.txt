@@ -2,16 +2,16 @@
 
 #include "../Point2f/Point2f.h"
 
-class Ball final
+class Sandbox_API Ball final
 {
 public:
-	Sandbox_API static Ball* MakeBall() { return nullptr; }
+	static Ball* MakeBall() { return nullptr; }
 
 	void Update(float _deltaTime);
 
-	Sandbox_API const Point2f& GetPosition() const { return Position; }
-	Sandbox_API const Point2f& GetVelocity() const { return Velocity; }
-	Sandbox_API float GetMass() const { return Mass; }
+	const Point2f& GetPosition() const { return Position; }
+	const Point2f& GetVelocity() const { return Velocity; }
+	float GetMass() const { return Mass; }
 
 private:
 	Point2f Position;

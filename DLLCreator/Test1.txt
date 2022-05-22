@@ -1,13 +1,13 @@
 #pragma once#include ../../Sandbox_API.h
 
-struct Point2f final
+struct Sandbox_API Point2f final
 {
 	float X, Y;
 
-	Sandbox_API explicit Point2f()
+	explicit Point2f()
 		: X{}, Y{}
 	{}
-	Sandbox_API explicit Point2f(const float x, const float y)
+	explicit Point2f(const float x, const float y)
 		: X{ x }, Y{ y }
 	{}
 };
