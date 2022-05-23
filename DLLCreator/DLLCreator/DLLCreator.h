@@ -24,7 +24,15 @@ namespace DLL
 		void AddMacroToFilteredHeaderFiles();
 		void GenerateCMakeFiles();
 		void GenerateRootCMakeFile();
+		void GenerateSubDirectoryCMakeFiles();
+		void GenerateSubDirectoryCppCMakeFile(const std::filesystem::directory_entry& _entry);
 
+		/* returns
+		0 if directory contains only .h files
+		1 if directory contains .cpp files,
+		2 if directory contains only .h and .lib,
+		3 if directory contains .lib, .h and .dll */
+		int8_t CheckSubDirectory(const std::filesystem::directory_entry& _entry);
 		std::string FindVcxprojFilePath() const;
 		void PrintDirectoryContents(const std::filesystem::directory_entry& entry);
 		std::vector<size_t> GetNumbersFromCSVString(const std::string& userInput) const;
