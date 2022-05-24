@@ -873,21 +873,21 @@ namespace DLL
 			{
 				const std::string path(entry.path().string());
 
-				if (path.find(".cpp"))
+				if (path.find(".cpp") != std::string::npos)
 				{
 					return 1;
 				}
-				else if (path.find(".dll"))
+				else if (path.find(".dll") != std::string::npos)
 				{
 					bHasDlls = true;
 					bHasOnlyHeaders = false;
 				}
-				else if (path.find(".lib"))
+				else if (path.find(".lib") != std::string::npos)
 				{
 					bHasLibs = true;
 					bHasOnlyHeaders = false;
 				}
-				else if (path.find(".h"))
+				else if (path.find(".h") != std::string::npos)
 				{
 					bHasOnlyHeaders = true;
 				}
