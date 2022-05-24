@@ -26,6 +26,8 @@ namespace DLL
 		void GenerateRootCMakeFile();
 		void GenerateSubDirectoryCMakeFiles();
 		void GenerateSubDirectoryCppCMakeFile(const std::filesystem::directory_entry& _entry);
+		void GenerateSubDirectoryCppCMakeFile(const std::string& libName, const std::string& path);
+		void GenerateSubDirectoryHAndLibCMakeFile(const std::filesystem::directory_entry& _entry);
 
 		/* returns
 		0 if directory contains only .h files
