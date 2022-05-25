@@ -48,6 +48,9 @@ namespace DLL
 
 		/* Step 6: Now that the macro and include has been added, generate CMake files */
 		GenerateCMakeFiles();
+
+		/* Step 7: Execute CMake */
+		// ExecuteCMake();
 	}
 
 	void DLLCreator::GetAllFilesAndDirectories()
@@ -608,8 +611,14 @@ namespace DLL
 		/* First generate the Root CMake file */
 		GenerateRootCMakeFile();
 
-		/* Now generate the sub directory CMake files */
 		GenerateSubDirectoryCMakeFiles();
+	}
+
+	void DLLCreator::ExecuteCMake()
+	{
+		system("mkdir DLL_BUILD");
+		system("cd DLL_BUILD");
+		system("cmake ..");
 	}
 
 	void DLLCreator::GenerateRootCMakeFile()
@@ -1314,10 +1323,18 @@ namespace DLL
 		/* Get what files should be converted */
 		if (bAreFilesPresent)
 		{
-			std::cout << "What files --NO DIRECTORIES-- should be converted? Print the numbers. E.g. 0,1,3,5. Write NONE if no files should be converted\n";
+			std::cout << "What files --NO DIRECTORIES-- should be converted? Print the numbers. E.g. 0,1,3,5\n";
+			std::cout << "Write NONE if no files should be converted or ALL if all files should be converted\n";
 
 			/* Get all the numbers from user input and save the requested entries */
 			std::string input(Utils::IO::ReadUserInput());
+			if (input == "ALL")
+			{
+				for (const auto& entry : entries)
+				{
+					FilteredFilePaths.push_back(entry.path().string());
+				}
+			}
 			if (input != "NONE")
 			{
 				std::vector<size_t> indices(GetNumbersFromCSVString(input));

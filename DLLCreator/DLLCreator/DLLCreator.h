@@ -23,6 +23,8 @@ namespace DLL
 		void CreateAPIFile();
 		void AddMacroToFilteredHeaderFiles();
 		void GenerateCMakeFiles();
+		void ExecuteCMake();
+
 		void GenerateRootCMakeFile();
 		void GenerateSubDirectoryCMakeFiles();
 		void GenerateSubDirectoryCppCMakeFile(const std::filesystem::directory_entry& _entry);
