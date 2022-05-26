@@ -50,7 +50,7 @@ namespace DLL
 		GenerateCMakeFiles();
 
 		/* Step 7: Execute CMake */
-		// ExecuteCMake();
+		ExecuteCMake();
 	}
 
 	void DLLCreator::GetAllFilesAndDirectories()
@@ -115,6 +115,9 @@ namespace DLL
 
 	void DLLCreator::FilterFilesAndDirectories()
 	{
+		using namespace Utils;
+		using namespace IO;
+
 		for (const std::filesystem::directory_entry& entry : PathEntries)
 		{
 			const std::string path(entry.path().string());
@@ -127,14 +130,26 @@ namespace DLL
 				continue;
 			}
 
-			Utils::IO::ClearConsole();
+			ClearConsole();
 			std::cout << "Select which files should be readied for a .dll conversion. This should only be headers!\n";
 
 			if (entry.is_directory())
 			{
 				std::cout << "Directory:\t" << entry.path().string() << "\nEnter Directory? Y/N >> ";
 
-				if (Utils::IO::ReadUserInput("Y"))
+				std::string userInput(ReadUserInput());
+
+				while (userInput != "Y" && userInput != "N")
+				{
+					ClearConsole();
+
+					std::cout << "Incorrect input: input must be Y or N!\n";
+					std::cout << "Directory:\t" << entry.path().string() << "\nEnter Directory? Y/N >> ";
+
+					userInput = ReadUserInput();
+				}
+
+				if (userInput == "Y")
 				{
 					PrintDirectoryContents(entry);
 				}
@@ -143,7 +158,19 @@ namespace DLL
 			{
 				std::cout << "File:\t\t" << entry.path().string() << "\nShould file be converted? Y/N >> ";
 
-				if (Utils::IO::ReadUserInput("Y"))
+				std::string userInput(ReadUserInput());
+
+				while (userInput != "Y" && userInput != "N")
+				{
+					ClearConsole();
+
+					std::cout << "Incorrect input: input must be Y or N!\n";
+					std::cout << "File:\t\t" << entry.path().string() << "\nShould file be converted? Y/N >> ";
+
+					userInput = ReadUserInput();
+				}
+
+				if (userInput == "Y")
 				{
 					FilteredFilePaths.push_back(entry.path().string());
 				}
@@ -158,7 +185,10 @@ namespace DLL
 
 	void DLLCreator::DefinePreprocessorMacro()
 	{
-		Utils::IO::ClearConsole();
+		using namespace Utils;
+		using namespace IO;
+
+		ClearConsole();
 
 		std::string vcxprojFilePath = FindVcxprojFilePath();
 
@@ -185,7 +215,13 @@ namespace DLL
 		assert(ReadFile(vcxProjFile, fileContents.data(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > File could not be read!");
 
 		const size_t count = std::count(fileContents.cbegin(), fileContents.cend(), '\n');
-		std::deque<size_t> charPositions{};
+		std::deque<size_t> preproInsertLocations{};
+		std::deque<size_t> nrOfConfigurations{};
+
+		const std::basic_string<BYTE> preprocessorDef("<PreprocessorDefinitions>"_byte);
+		const std::basic_string<BYTE> configurationDef("<ConfigurationType>"_byte);
+
+		std::basic_string<BYTE> currentConfiguration{};
 
 		size_t previousNewLine{};
 		for (size_t i{}; i < count; ++i)
@@ -194,95 +230,46 @@ namespace DLL
 			const std::basic_string<BYTE> line(fileContents.substr(previousNewLine, nextNewLine + 1 - previousNewLine));
 
 			{ /* Scope-lock the using directives */
-				using namespace Utils;
-				using namespace IO;
 
-				if (line.find("<PreprocessorDefinitions>"_byte) != std::string::npos)
+				if (line.find(preprocessorDef) != std::string::npos)
 				{
-					std::cout << line.c_str();
-
 					const size_t moduloPos(line.find_last_of(';'));
 
 					assert(moduloPos != std::string::npos && "DLLCreator::DefinePreprocessorMacros() > % was not found in the Preprocessor line!");
 
-					charPositions.push_back(moduloPos + previousNewLine + 1);
+					preproInsertLocations.push_back(moduloPos + previousNewLine + 1);
+				}
+				else if (const size_t configurationPos{ line.find(configurationDef) }; configurationPos != std::string::npos)
+				{
+					nrOfConfigurations.push_back(configurationPos + previousNewLine);
+
+					if (currentConfiguration.empty())
+					{
+						currentConfiguration = line.substr(line.find_first_of('>') + 1, line.find_last_of('<') - line.find_first_of('>') - 1);
+					}
 				}
 			}
 
 			previousNewLine = nextNewLine + 1;
 		}
-#if 0
-		/* Parse the buffer, searching for preprocessor definitions */
-		std::deque<DWORD> lineIndices{};
-		DWORD previousIndex{};
-		for (DWORD i{}; i < readBytes; ++i)
+
+		assert(nrOfConfigurations.size() == preproInsertLocations.size());
+
+		for (size_t i{}; i < preproInsertLocations.size();)
 		{
-			/* \n is our delimiter */
-			if (pBuffer[i] == static_cast<BYTE>('\n'))
+			fileContents.insert(preproInsertLocations[i], PreproExportMacro);
+
+			for (size_t j{ i }; j < preproInsertLocations.size(); ++j)
 			{
-				std::unique_ptr<BYTE[]> pLine{ new BYTE[i - previousIndex]{} };
-				assert(Utils::IO::StringCopy(pLine.get(), pBuffer.get() + previousIndex, i - previousIndex) && "DLLCreator::DefinePreprocessorMacros() > String could not be copied!");
-
-				{
-					using namespace Utils;
-					using namespace IO;
-					if (Utils::IO::StringContains(pLine.get(), "<PreprocessorDefinitions>\n"_byte, '\n'))
-					{
-						lineIndices.push_back(previousIndex);
-					}
-				}
-
-				previousIndex = i + 1;
+				preproInsertLocations[j] += ExportMacroLength;
 			}
+
+			preproInsertLocations.pop_front();
 		}
 
-		/* Make a new buffer with the length of the vcxproj + the export macro added (amount of times as there are preprocesser definitions defined) */
-		const DWORD newBufferSize(fileSize + static_cast<DWORD>(lineIndices.size()) * ExportMacroLength);
-		std::unique_ptr<BYTE[]> pNewBuffer(new BYTE[newBufferSize]{});
-		for (DWORD i{}, newFileCounter{}; i < fileSize; ++i, ++newFileCounter)
+		for (size_t i{}; i < nrOfConfigurations.size(); ++i)
 		{
-			if (lineIndices.empty() || i < lineIndices.front())
-			{
-				pNewBuffer[newFileCounter] = pBuffer[i];
-			}
-			else
-			{
-				/* just keep filling up the buffer until we meet the % */
-				if (pBuffer[i] != static_cast<BYTE>('%'))
-				{
-					pNewBuffer[newFileCounter] = pBuffer[i];
-				}
-				else
-				{
-					/* add macro to the buffer */
-					for (DWORD j{}; j < ExportMacroLength; ++j)
-					{
-						pNewBuffer[newFileCounter++] = ExportMacro[j];
-					}
-
-					pNewBuffer[newFileCounter] = static_cast<BYTE>('%');
-
-					lineIndices.pop_front();
-
-					for (DWORD& elem : lineIndices)
-					{
-						elem += ExportMacroLength;
-					}
-				}
-			}
-		}
-#endif
-
-		for (size_t i{}; i < charPositions.size();)
-		{
-			fileContents.insert(charPositions[i], PreproExportMacro);
-
-			for (size_t j{ i }; j < charPositions.size(); ++j)
-			{
-				charPositions[j] += ExportMacroLength;
-			}
-
-			charPositions.pop_front();
+			fileContents.replace(fileContents.find(currentConfiguration), currentConfiguration.size(), "DynamicLibrary"_byte);
 		}
 
 		DWORD bytesWritten{};
@@ -303,7 +290,10 @@ namespace DLL
 		assert(WriteFile(testFile, fileContents.data(), static_cast<DWORD>(fileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 		assert(CloseHandle(testFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
 #else
-		assert(WriteFile(testFile, fileContents.data(), fileContents.size(), &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
+		SetFilePointer(vcxProjFile, 0, nullptr, FILE_BEGIN);
+		SetEndOfFile(vcxProjFile);
+
+		assert(WriteFile(vcxProjFile, fileContents.data(), static_cast<DWORD>(fileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::DefinePreprocessorMacros() > The vcxproj could not be written to!");
 #endif
 
 		assert(CloseHandle(vcxProjFile) != 0 && "DLLCreator::DefinePreprocessorMacros() > Handle to file could not be closed!");
@@ -611,7 +601,10 @@ namespace DLL
 		/* First generate the Root CMake file */
 		GenerateRootCMakeFile();
 
-		GenerateSubDirectoryCMakeFiles();
+		for (const std::filesystem::directory_entry& entry : PathEntries)
+		{
+			GenerateSubDirectoryCMakeFiles(entry);
+		}
 	}
 
 	void DLLCreator::ExecuteCMake()
@@ -619,6 +612,7 @@ namespace DLL
 		system("mkdir DLL_BUILD");
 		system("cd DLL_BUILD");
 		system("cmake ..");
+		system("cmake --build ..");
 	}
 
 	void DLLCreator::GenerateRootCMakeFile()
@@ -695,40 +689,162 @@ namespace DLL
 		assert(CloseHandle(cmakeRootFile) != 0 && "DLLCreator::GenerateRootCMakeFile() > Handle to file could not be closed!");
 	}
 
-	void DLLCreator::GenerateSubDirectoryCMakeFiles()
+	void DLLCreator::GenerateSubDirectoryCMakeFiles(const std::filesystem::directory_entry& entry)
 	{
 		using namespace Utils;
 		using namespace IO;
 
-		for (const std::filesystem::directory_entry& entry : PathEntries)
+		/* Check every file in this subdirectory, if it contains only headers and libs, it is an interface */
+		/* if it contains libs, headers AND dlls, it is also an interface, but the dlls need to be copied */
+		/* if it contains cpp files, we need to add a normal library (NOT AN INTERFACE) and link the headers */
+
+		if (entry.is_directory())
 		{
-			/* Check every file in this subdirectory, if it contains only headers and libs, it is an interface */
-			/* if it contains libs, headers AND dlls, it is also an interface, but the dlls need to be copied */
-			/* if it contains cpp files, we need to add a normal library (NOT AN INTERFACE) and link the headers */
+			const int8_t subDirectoryType(CheckSubDirectory(entry));
 
-			if (entry.is_directory())
+			switch (subDirectoryType)
 			{
-				const int8_t subDirectoryType(CheckSubDirectory(entry));
-
-				switch (subDirectoryType)
-				{
-				case 0 /* headers only */:
-					/* nothing should happen */
-					break;
-				case 1 /* contains .cpp */:
-					/* Add every .cpp file to the library and set the include directories */
-					GenerateSubDirectoryCppCMakeFile(entry);
-					break;
-				case 2 /* contains .h and .lib */:
-					/* add the library name and set the include directories */
-					GenerateSubDirectoryHAndLibCMakeFile(entry);
-					break;
-				case 3 /* contains .lib, .h and .dll */:
-					/*  */
-					break;
-				}
+			case -1 /* Directories only */:
+				/* Assume this is a library folder, and there*/
+				GenerateLibraryDirectoryCMakeFiles(entry);
+				break;
+			case 0 /* headers only */:
+				/* make a library interface and set the target include directories */
+				GenrerateSubDirectoryHCMakeFiles(entry);
+				break;
+			case 1 /* contains .cpp */:
+				/* Add every .cpp file to the library and set the include directories */
+				GenerateSubDirectoryCppCMakeFile(entry);
+				break;
+				/* The ones below should not happen, they are legit horrible folder structure */
+			case 2 /* contains .h and .lib */:
+				/* add the library name and set the include directories */
+				std::cout << "This program requires a bit of a sane folder structure. Header files and .lib files should really belong in seperate folders\n";
+				std::abort();
+				break;
+			case 3 /* contains .lib, .h and .dll */:
+				std::cout << "This program requires a bit of a sane folder structure. Header files and .lib|.dll files should really belong in seperate folders\n";
+				std::abort();
+				break;
 			}
 		}
+	}
+
+	void DLLCreator::GenerateLibraryDirectoryCMakeFiles(const std::filesystem::directory_entry& entry)
+	{
+		using namespace Utils;
+		using namespace IO;
+
+		for (const std::filesystem::directory_entry& directory : std::filesystem::directory_iterator(entry))
+		{
+			ClearConsole();
+			
+			const std::string subDirectory(directory.path().string());
+
+			std::cout << "The subdirectory: " << subDirectory << " was found in " << entry.path().string() << "\n";
+			std::cout << "The program assumes that this is a Library folder, containing external libraries and will therefore not search any deeper\n";
+
+			std::cout << "What type of files does " << subDirectory << " contain?\n";
+			std::cout << "0. Only .h files\n";
+			std::cout << "1. .h and .cpp files \n";
+			std::cout << "2. .h and .lib files\n";
+			std::cout << "3. .h, .lib and .dll files\n";
+
+			std::string userInput(ReadUserInput());
+
+			while (userInput != "0" && userInput != "1" && userInput != "2" && userInput != "3")
+			{
+				ClearConsole();
+
+				std::cout << "Input must be either 0, 1, 2 or 3!\n";
+				std::cout << "What type of files does " << subDirectory << " contain?\n";
+				std::cout << "0. Only .h files\n";
+				std::cout << "1. .h and .cpp files \n";
+				std::cout << "2. .h and .lib files\n";
+				std::cout << "3. .h, .lib and .dll files\n";
+
+				userInput = ReadUserInput();
+			}
+
+			switch (std::stoi(userInput))
+			{
+			case 0:
+				GenrerateSubDirectoryHCMakeFiles(directory);
+				break;
+			case 1:
+				GenerateSubDirectoryCppCMakeFile(directory);
+				break;
+			case 2:
+				GenerateSubDirectoryHAndLibCMakeFile(directory);
+				break;
+			case 3:
+				GenerateSubDirectoryHAndLibAndDLLCMakeFile(directory);
+				break;
+			}
+		}
+	}
+
+	void DLLCreator::GenrerateSubDirectoryHCMakeFiles(const std::filesystem::directory_entry& _entry)
+	{
+		using namespace Utils;
+		using namespace IO;
+
+		const std::string path(_entry.path().string());
+		const std::string libName(path.substr(path.find_last_of('\\') + 1, path.size() - path.find_last_of('\\')));
+
+		/* open the interface preset file */
+		HANDLE cmakeCppPresetFile(
+			CreateFileA("Resources/CMakeSubDirectoryInterfacePreset.txt",
+				GENERIC_READ,
+				FILE_SHARE_READ,
+				nullptr,
+				OPEN_EXISTING,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
+
+		assert(cmakeCppPresetFile != INVALID_HANDLE_VALUE);
+
+		std::basic_string<BYTE> fileContents{};
+
+		/* Read the file into a buffer */
+		const DWORD fileSize(GetFileSize(cmakeCppPresetFile, nullptr));
+		fileContents.resize(fileSize);
+
+		DWORD readBytes{};
+		assert(ReadFile(cmakeCppPresetFile, fileContents.data(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::GenerateSubDirectoryCppCMakeFile() > File could not be read!");
+		assert(CloseHandle(cmakeCppPresetFile) != 0 && "DLLCreator::GenerateSubDirectoryCppCMakeFile() > Handle to file could not be closed!");
+
+		std::string convertedFileContents(ConvertToRegularString(fileContents));
+
+		/* Substitute the lib name, header location and project name in */
+		const std::regex libNameRegex("<LIBRARY_NAME>");
+		const std::regex headerLocationRegex("<HEADER_LOCATION>");
+		const std::regex projectNameRegex("<PROJECT_NAME>");
+
+		convertedFileContents = std::regex_replace(convertedFileContents, libNameRegex, libName);
+		convertedFileContents = std::regex_replace(convertedFileContents, headerLocationRegex, ""); /* folder contains only headers so... */
+		convertedFileContents = std::regex_replace(convertedFileContents, projectNameRegex, ConvertToRegularString(ProjectName));
+
+		/* make the interface file */
+		HANDLE cmakeInterfaceFile(
+			CreateFileA((_entry.path().string() + "\\CMakeLists.txt").c_str(),
+				GENERIC_WRITE,
+				FILE_SHARE_WRITE,
+				nullptr,
+				OPEN_ALWAYS,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
+
+		assert(cmakeInterfaceFile != INVALID_HANDLE_VALUE);
+
+		SetFilePointer(cmakeInterfaceFile, 0, nullptr, FILE_BEGIN);
+		SetEndOfFile(cmakeInterfaceFile);
+
+		DWORD bytesWritten{};
+		assert(WriteFile(cmakeInterfaceFile, convertedFileContents.c_str(), static_cast<DWORD>(convertedFileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > The new header file could not be written to!");
+		assert(CloseHandle(cmakeInterfaceFile) != 0 && "DLLCreator::GenerateRootCMakeFile() > Handle to file could not be closed!");
 	}
 
 	void DLLCreator::GenerateSubDirectoryCppCMakeFile(const std::filesystem::directory_entry& _entry)
@@ -1011,70 +1127,77 @@ namespace DLL
 		using namespace Utils;
 		using namespace IO;
 
-		std::vector<std::string> filesToAddToLibrary{};
+		const std::string path(_entry.path().string());
+		const std::string libName(path.substr(path.find_last_of('\\') + 1, path.size() - path.find_last_of('\\')));
 
-		for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(_entry))
+		std::cout << "What is the RELATIVE path for the .lib files?\n";
+		std::cout << "The path must be relative to: " << _entry.path().string() << "\n";
+		std::cout << "Example:\n";
+		std::cout << "SDL2\n\t\tinclude\n\t\tsource\n";
+		std::cout << "Relative path is: /source\n";
+		std::cout << "Enter relative path: ";
+
+		std::string sourcePath(ReadUserInput());
+
+		if (sourcePath[0] != '/')
 		{
-			/* If we find another directory, start this sequence again */
-			if (entry.is_directory())
-			{
-				const std::string path(entry.path().string());
-				const std::string libName(path.substr(path.find_last_of('\\') + 1));
-
-				filesToAddToLibrary.push_back(libName);
-			}
+			sourcePath.insert(0, 1, '/');
 		}
 
-		std::string fileContents{};
-		for (const std::string& directory : filesToAddToLibrary)
+		ClearConsole();
+
+		std::cout << "What is the RELATIVE path for the .h files?\n";
+		std::cout << "The path must be relative to: " << _entry.path().string() << "\n";
+		std::cout << "Example:\n";
+		std::cout << "SDL2\n\t\tinclude\n\t\tsource\n";
+		std::cout << "Relative path is: /include\n";
+		std::cout << "Enter relative path: ";
+
+		std::string includePath(ReadUserInput());
+
+		if (includePath[0] != '/')
 		{
-			std::cout << "For the directory: " << directory << " are all the headers in the same directory as the .lib files?\n";
-			std::cout << "Y/N >> ";
-
-			std::string userInput{ ReadUserInput() };
-			while (userInput != "Y" && userInput != "N")
-			{
-				ClearConsole();
-
-				std::cout << "Invalid input! Input must be Y or N\n";
-				std::cout << "For the directory: " << directory << " are all the headers in the same directory as the .cpp files?\n";
-				std::cout << "Y/N >> ";
-
-				userInput = ReadUserInput();
-			}
-
-			ClearConsole();
-
-			std::string headerLocation{};
-			if (userInput == "N")
-			{
-				std::cout << "For the directory: " << directory << " please input the relative location of the headers\n";
-				std::cout << "INFO: All headers must be located in the same location\n";
-				std::cout << "For example: Point2f >\n\tPoint2f.cpp\n\tInclude\n\t\tPoint2f.h\n";
-				std::cout << "Relative location would be Include\n";
-				std::cout << "Relative location of headers: ";
-
-				headerLocation = ReadUserInput();
-			}
-
-			std::string cmakeAddLibrary("add_library(INTERFACE)\n");
-			std::string cmakeIncludeDirectory("target_include_directories(PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})\n");
-
-			cmakeAddLibrary.insert(cmakeAddLibrary.find_first_of('('), directory + " ");
-
-			cmakeIncludeDirectory.insert(cmakeIncludeDirectory.find_first_of('('), ConvertToRegularString(ProjectName) + " ");
-
-			if (!headerLocation.empty())
-			{
-				cmakeIncludeDirectory.insert(cmakeIncludeDirectory.find_last_of(')'), "/" + headerLocation);
-			}
-
-			fileContents.append(cmakeAddLibrary);
-			fileContents.append(cmakeIncludeDirectory + "\n");
+			includePath.insert(0, 1, '/');
 		}
+
+		/* open the dll preset file */
+		HANDLE cmakeLibPresetFile(
+			CreateFileA("Resources/CMakeSubDirectoryLibPreset.txt",
+				GENERIC_READ,
+				FILE_SHARE_READ,
+				nullptr,
+				OPEN_EXISTING,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
+
+		assert(cmakeLibPresetFile != INVALID_HANDLE_VALUE);
+
+		std::basic_string<BYTE> fileContents{};
+
+		/* Read the file into a buffer */
+		const DWORD fileSize(GetFileSize(cmakeLibPresetFile, nullptr));
+		fileContents.resize(fileSize);
+
+		DWORD readBytes{};
+		assert(ReadFile(cmakeLibPresetFile, fileContents.data(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::GenerateSubDirectoryCppCMakeFile() > File could not be read!");
+		assert(CloseHandle(cmakeLibPresetFile) != 0 && "DLLCreator::GenerateSubDirectoryCppCMakeFile() > Handle to file could not be closed!");
+
+		std::string convertedFileContents(ConvertToRegularString(fileContents));
+
+		/* Substitute the lib name, header location and project name in */
+		const std::regex libNameRegex("<LIBRARY_NAME>");
+		const std::regex headerLocationRegex("<HEADER_LOCATION>");
+		const std::regex sourceLocationRegex("<SOURCE_LOCATION>");
+		const std::regex projectNameRegex("<PROJECT_NAME>");
+
+		convertedFileContents = std::regex_replace(convertedFileContents, libNameRegex, libName);
+		convertedFileContents = std::regex_replace(convertedFileContents, headerLocationRegex, includePath);
+		convertedFileContents = std::regex_replace(convertedFileContents, sourceLocationRegex, sourcePath);
+		convertedFileContents = std::regex_replace(convertedFileContents, projectNameRegex, ConvertToRegularString(ProjectName));
 
 		/* make the header + lib file */
-		HANDLE cmakeHAndLibFile(
+		HANDLE cmakeLibFile(
 			CreateFileA((_entry.path().string() + "\\CMakeLists.txt").c_str(),
 				GENERIC_WRITE,
 				FILE_SHARE_WRITE,
@@ -1084,14 +1207,128 @@ namespace DLL
 				nullptr)
 		);
 
-		assert(cmakeHAndLibFile != INVALID_HANDLE_VALUE);
+		assert(cmakeLibFile != INVALID_HANDLE_VALUE);
 
-		SetFilePointer(cmakeHAndLibFile, 0, nullptr, FILE_BEGIN);
-		SetEndOfFile(cmakeHAndLibFile);
+		SetFilePointer(cmakeLibFile, 0, nullptr, FILE_BEGIN);
+		SetEndOfFile(cmakeLibFile);
 
 		DWORD bytesWritten{};
-		assert(WriteFile(cmakeHAndLibFile, fileContents.c_str(), static_cast<DWORD>(fileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > The new header file could not be written to!");
-		assert(CloseHandle(cmakeHAndLibFile) != 0 && "DLLCreator::GenerateSubDirectoryHAndLibCMakeFile() > Handle to file could not be closed!");
+		assert(WriteFile(cmakeLibFile, convertedFileContents.c_str(), static_cast<DWORD>(convertedFileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > The new header file could not be written to!");
+		assert(CloseHandle(cmakeLibFile) != 0 && "DLLCreator::GenerateSubDirectoryHAndLibCMakeFile() > Handle to file could not be closed!");
+	}
+
+	void DLLCreator::GenerateSubDirectoryHAndLibAndDLLCMakeFile(const std::filesystem::directory_entry& _entry)
+	{
+		using namespace Utils;
+		using namespace IO;
+
+		const std::string path(_entry.path().string());
+		const std::string libName(path.substr(path.find_last_of('\\') + 1, path.size() - path.find_last_of('\\')));
+
+		std::cout << "What is the RELATIVE path for the .lib and .dll files?\n";
+		std::cout << "The path must be relative to: " << _entry.path().string() << "\n";
+		std::cout << "Example:\n";
+		std::cout << "SDL2\n\t\tinclude\n\t\tsource\n";
+		std::cout << "Relative path is: /source\n";
+		std::cout << "Enter relative path: ";
+
+		std::string sourcePath(ReadUserInput());
+
+		if (sourcePath[0] != '/')
+		{
+			sourcePath.insert(0, 1, '/');
+		}
+
+		std::vector<std::string> dllsToCopy{};
+
+		for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(_entry.path().string() + sourcePath))
+		{
+			assert(entry.is_regular_file() && "DLLCreator::GenerateSubDirectoryHAndLibAndDLLCMakeFile() > Source folder may not contain sub directories");
+
+			const std::string path(entry.path().string());
+
+			if (path.find(".dll") != std::string::npos)
+			{
+				dllsToCopy.push_back(path.substr(path.find_last_of('\\') + 1));
+			}
+		}
+
+		ClearConsole();
+
+		std::cout << "What is the RELATIVE path for the .h files?\n";
+		std::cout << "The path must be relative to: " << _entry.path().string() << "\n";
+		std::cout << "Example:\n";
+		std::cout << "SDL2\n\t\tinclude\n\t\tsource\n";
+		std::cout << "Relative path is: /include\n";
+		std::cout << "Enter relative path: ";
+
+		std::string includePath(ReadUserInput());
+
+		if (includePath[0] != '/')
+		{
+			includePath.insert(0, 1, '/');
+		}
+
+		/* open the dll preset file */
+		HANDLE cmakeDLLPresetFile(
+			CreateFileA("Resources/CMakeSubDirectoryDLLPreset.txt",
+				GENERIC_READ,
+				FILE_SHARE_READ,
+				nullptr,
+				OPEN_EXISTING,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
+
+		assert(cmakeDLLPresetFile != INVALID_HANDLE_VALUE);
+
+		std::basic_string<BYTE> fileContents{};
+
+		/* Read the file into a buffer */
+		const DWORD fileSize(GetFileSize(cmakeDLLPresetFile, nullptr));
+		fileContents.resize(fileSize);
+
+		DWORD readBytes{};
+		assert(ReadFile(cmakeDLLPresetFile, fileContents.data(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::GenerateSubDirectoryCppCMakeFile() > File could not be read!");
+		assert(CloseHandle(cmakeDLLPresetFile) != 0 && "DLLCreator::GenerateSubDirectoryCppCMakeFile() > Handle to file could not be closed!");
+
+		std::string convertedFileContents(ConvertToRegularString(fileContents));
+
+		/* Substitute the lib name, header location and project name in */
+		const std::regex libNameRegex("<LIBRARY_NAME>");
+		const std::regex headerLocationRegex("<HEADER_LOCATION>");
+		const std::regex sourceLocationRegex("<SOURCE_LOCATION>");
+		const std::regex projectNameRegex("<PROJECT_NAME>");
+
+		convertedFileContents = std::regex_replace(convertedFileContents, libNameRegex, libName);
+		convertedFileContents = std::regex_replace(convertedFileContents, headerLocationRegex, includePath);
+		convertedFileContents = std::regex_replace(convertedFileContents, sourceLocationRegex, sourcePath);
+		convertedFileContents = std::regex_replace(convertedFileContents, projectNameRegex, ConvertToRegularString(ProjectName));
+
+		for (const std::string& dllFile : dllsToCopy)
+		{
+			convertedFileContents.append("install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/" + dllFile + " DESTINATION bin)\n");
+		}
+
+		/* make the header + lib file */
+		HANDLE cmakeDLLFile(
+			CreateFileA((_entry.path().string() + "\\CMakeLists.txt").c_str(),
+				GENERIC_WRITE,
+				FILE_SHARE_WRITE,
+				nullptr,
+				OPEN_ALWAYS,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
+
+		assert(cmakeDLLFile != INVALID_HANDLE_VALUE);
+
+		SetFilePointer(cmakeDLLFile, 0, nullptr, FILE_BEGIN);
+		SetEndOfFile(cmakeDLLFile);
+
+		DWORD bytesWritten{};
+		assert(WriteFile(cmakeDLLFile, convertedFileContents.c_str(), static_cast<DWORD>(convertedFileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > The new header file could not be written to!");
+		assert(CloseHandle(cmakeDLLFile) != 0 && "DLLCreator::GenerateSubDirectoryHAndLibCMakeFile() > Handle to file could not be closed!");
 	}
 
 	/* returns
@@ -1101,7 +1338,7 @@ namespace DLL
 	3 if directory contains .lib, .h and .dll */
 	int8_t DLLCreator::CheckSubDirectory(const std::filesystem::directory_entry& _entry)
 	{
-		bool bHasDlls(false), bHasLibs(false), bHasOnlyHeaders(false);
+		bool bHasDlls(false), bHasLibs(false), bHasOnlyHeaders(false), bOnlyDirectories(true);
 		for (const std::filesystem::directory_entry& entry : std::filesystem::directory_iterator(_entry))
 		{
 			if (entry.is_regular_file())
@@ -1126,6 +1363,8 @@ namespace DLL
 				{
 					bHasOnlyHeaders = true;
 				}
+
+				bOnlyDirectories = false;
 			}
 		}
 
@@ -1133,13 +1372,13 @@ namespace DLL
 		{
 			return 0;
 		}
-		else if (bHasLibs)
-		{
-			return 2;
-		}
 		else if (bHasDlls)
 		{
 			return 3;
+		}
+		else if (bHasLibs)
+		{
+			return 2;
 		}
 
 		return -1;

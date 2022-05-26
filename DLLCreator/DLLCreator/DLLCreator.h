@@ -5,7 +5,7 @@
 #include <vector> /* std::vector */
 #include <filesystem> /* std::filesystem */
 
-#define WRITE_TO_TEST_FILE
+// #define WRITE_TO_TEST_FILE
 
 namespace DLL
 {
@@ -26,10 +26,13 @@ namespace DLL
 		void ExecuteCMake();
 
 		void GenerateRootCMakeFile();
-		void GenerateSubDirectoryCMakeFiles();
+		void GenerateSubDirectoryCMakeFiles(const std::filesystem::directory_entry& entry);
+		void GenerateLibraryDirectoryCMakeFiles(const std::filesystem::directory_entry& entry);
+		void GenrerateSubDirectoryHCMakeFiles(const std::filesystem::directory_entry& _entry);
 		void GenerateSubDirectoryCppCMakeFile(const std::filesystem::directory_entry& _entry);
 		void GenerateSubDirectoryCppCMakeFile(const std::string& libName, const std::string& path);
 		void GenerateSubDirectoryHAndLibCMakeFile(const std::filesystem::directory_entry& _entry);
+		void GenerateSubDirectoryHAndLibAndDLLCMakeFile(const std::filesystem::directory_entry& _entry);
 
 		/* returns
 		0 if directory contains only .h files

@@ -10,7 +10,7 @@ int main()
 
     /* laptop */
     // DLL::DLLCreator dll("D:\\000 Documents\\000 All Programs\\Sandbox");
-    DLL::DLLCreator dll("C:\\Users\\Rhidian De Wit\\Desktop\\Temp\\Boopigin - Copy\\Minigin");
+    DLL::DLLCreator dll("C:\\Users\\Rhidian De Wit\\Desktop\\Temp\\Boopigin - Copy");
     
     dll.Convert();
 }
