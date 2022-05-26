@@ -609,10 +609,15 @@ namespace DLL
 
 	void DLLCreator::ExecuteCMake()
 	{
+		system(("cd " + Utils::IO::ConvertToRegularString(RootPath)).c_str());
 		system("mkdir DLL_BUILD");
 		system("cd DLL_BUILD");
+
+		/* Generate build system */
 		system("cmake ..");
-		system("cmake --build ..");
+
+		/* Actually build it, we're building only in release */
+		system("cmake --build .. --config Release");
 	}
 
 	void DLLCreator::GenerateRootCMakeFile()
@@ -1500,6 +1505,7 @@ namespace DLL
 
 			/* Get all the numbers from user input and save the requested entries */
 			std::string input(Utils::IO::ReadUserInput());
+				
 			if (input == "ALL")
 			{
 				for (const auto& entry : entries)
