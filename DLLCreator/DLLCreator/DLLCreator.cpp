@@ -25,6 +25,14 @@ namespace DLL
 		, ProjectName(Utils::IO::ConvertToByteString(rootPath))
 	{
 		ProjectName = ProjectName.substr(ProjectName.find_last_of('\\') + 1, ProjectName.size() - ProjectName.find_last_of('\\'));
+		
+		for (auto& c : ProjectName)
+		{
+			if (c == ' ')
+			{
+				c = '_';
+			}
+		}
 	}
 
 	void DLLCreator::Convert()
@@ -570,6 +578,7 @@ namespace DLL
 				fileContents.insert(0, include);
 			}
 
+#if WRITE_TO_TEST_FILE
 			/* open the altered header */
 			HANDLE newHeader(
 				CreateFileA((std::string("Test") + std::to_string(fileCounter++) + ".txt").c_str(),
@@ -589,6 +598,13 @@ namespace DLL
 			DWORD bytesWritten{};
 			assert(WriteFile(newHeader, fileContents.c_str(), static_cast<DWORD>(fileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > The new header file could not be written to!");
 			assert(CloseHandle(newHeader) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > Handle to file could not be closed!");
+#else
+			SetFilePointer(header, 0, nullptr, FILE_BEGIN);
+			SetEndOfFile(header);
+
+			DWORD bytesWritten{};
+			assert(WriteFile(header, fileContents.c_str(), static_cast<DWORD>(fileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > The new header file could not be written to!");
+#endif
 
 			assert(CloseHandle(header) != 0 && "DLLCreator::AddMacroToFilteredHeaderFiles() > Handle to file could not be closed!");
 		}
@@ -609,15 +625,18 @@ namespace DLL
 
 	void DLLCreator::ExecuteCMake()
 	{
-		system(("cd " + Utils::IO::ConvertToRegularString(RootPath)).c_str());
-		system("mkdir DLL_BUILD");
-		system("cd DLL_BUILD");
+		using namespace Utils;
+		using namespace IO;
 
-		/* Generate build system */
-		system("cmake ..");
+		const std::string rootPath(ConvertToRegularString(RootPath));
 
-		/* Actually build it, we're building only in release */
-		system("cmake --build .. --config Release");
+		system(
+			((("cd ") + rootPath) + " && " +
+			"mkdir DLL_BUILD && " +
+			"cd DLL_BUILD && " +
+			"cmake .. && "
+			"cmake --build .. --config Release"
+			).c_str());
 	}
 
 	void DLLCreator::GenerateRootCMakeFile()
