@@ -25,10 +25,10 @@ namespace DLL
 		, ProjectName(Utils::IO::ConvertToByteString(rootPath))
 	{
 		ProjectName = ProjectName.substr(ProjectName.find_last_of('\\') + 1, ProjectName.size() - ProjectName.find_last_of('\\'));
-		
+
 		for (auto& c : ProjectName)
 		{
-			if (c == ' ')
+			if (c == ' ' || c == '-')
 			{
 				c = '_';
 			}
@@ -358,6 +358,14 @@ namespace DLL
 			}
 		} while (bShouldLoop);
 
+		for (auto& c : api)
+		{
+			if (c == ' ' || c == '-')
+			{
+				c = '_';
+			}
+		}
+
 		APIMacro = api;
 
 		{ /* Scope-lock using directives */
@@ -557,14 +565,14 @@ namespace DLL
 
 			/* We also need to add the include to the API file */
 			const size_t directoriesDeep(GetNumberOfDirectoriesDeep(entry));
-			std::basic_string<BYTE> include{ "#include "_byte };
+			std::basic_string<BYTE> include{ "#include \""_byte };
 
 			for (size_t i{}; i < directoriesDeep; ++i)
 			{
 				include.append("../"_byte);
 			}
 
-			include.append(APIFileName);
+			include.append(APIFileName + "\""_byte);
 
 			const std::basic_string<BYTE> pragmaOnce("#pragma once"_byte);
 			/* Check if the file contains a #pragma once */
@@ -614,13 +622,13 @@ namespace DLL
 	{
 		Utils::IO::ClearConsole();
 
-		/* First generate the Root CMake file */
-		GenerateRootCMakeFile();
-
 		for (const std::filesystem::directory_entry& entry : PathEntries)
 		{
 			GenerateSubDirectoryCMakeFiles(entry);
 		}
+
+		/* Generate the Root CMake file after everything else, because we need the set variables in the sub directories */
+		GenerateRootCMakeFile();
 	}
 
 	void DLLCreator::ExecuteCMake()
@@ -632,11 +640,11 @@ namespace DLL
 
 		system(
 			((("cd ") + rootPath) + " && " +
-			"mkdir DLL_BUILD && " +
-			"cd DLL_BUILD && " +
-			"cmake .. && "
-			"cmake --build .. --config Release"
-			).c_str());
+				"mkdir DLL_BUILD && " +
+				"cd DLL_BUILD && " +
+				"cmake .. && "
+				"cmake --build . --config Release"
+				).c_str());
 	}
 
 	void DLLCreator::GenerateRootCMakeFile()
@@ -673,24 +681,51 @@ namespace DLL
 		const std::regex versionMajorRegex("<VERSION_MAJOR>");
 		const std::regex versionMinorRegex("<VERSION_MINOR>");
 		const std::regex projectNameRegex("<PROJECT_NAME>");
+		const std::regex subDirectoriesRegex("<SUBDIRECTORIES>");
+		const std::regex librariesRegex("<LIBRARIES>");
+		const std::regex includesRegex("<INCLUDES>");
+		const std::regex dllsRegex("<DLLS>");
 
 		convertedFileContents = std::regex_replace(convertedFileContents, versionMajorRegex, "3");
 		convertedFileContents = std::regex_replace(convertedFileContents, versionMinorRegex, "10");
 		convertedFileContents = std::regex_replace(convertedFileContents, projectNameRegex, ConvertToRegularString(ProjectName));
 
-		/* Spacing */
-		convertedFileContents.append("\n");
-
+		/* Add sub directories */
+		std::string subDirectories{};
 		/* Loop over all sub directories, and add them as sub directories */
 		for (const std::filesystem::directory_entry& subD : PathEntries)
 		{
 			if (subD.is_directory())
 			{
 				const std::string path(subD.path().string());
-				convertedFileContents.append(std::string("\nadd_subdirectory(") +
-					path.substr(path.find_last_of('\\') + 1, path.size() - path.find_last_of('\\')) + ")");
+				subDirectories.append(path.substr(path.find_last_of('\\') + 1, path.size() - path.find_last_of('\\')) + " ");
 			}
 		}
+		convertedFileContents = std::regex_replace(convertedFileContents, subDirectoriesRegex, subDirectories);
+
+		/* Add libraries */
+		std::string libraries{};
+		for (const std::string& lib : LibSourceDirectories)
+		{
+			libraries.append(lib + " ");
+		}
+		convertedFileContents = std::regex_replace(convertedFileContents, librariesRegex, libraries);
+
+		/* Add includes */
+		std::string includes{};
+		for (const std::string& include : LibIncludeDirectories)
+		{
+			includes.append(include + " ");
+		}
+		convertedFileContents = std::regex_replace(convertedFileContents, includesRegex, includes);
+
+		/* Add dlls */
+		std::string dlls{};
+		for (const std::string& dll : DllDirectories)
+		{
+			dlls.append(dll + " ");
+		}
+		convertedFileContents = std::regex_replace(convertedFileContents, dllsRegex, dlls);
 
 		/* make a new root file */
 		HANDLE cmakeRootFile(
@@ -759,11 +794,15 @@ namespace DLL
 		using namespace Utils;
 		using namespace IO;
 
+		std::vector<std::string> libraryNames{};
+
 		for (const std::filesystem::directory_entry& directory : std::filesystem::directory_iterator(entry))
 		{
 			ClearConsole();
-			
+
 			const std::string subDirectory(directory.path().string());
+			const std::string libName(subDirectory.substr(subDirectory.find_last_of('\\') + 1, subDirectory.size() - subDirectory.find_last_of('\\')));
+			libraryNames.push_back(libName);
 
 			std::cout << "The subdirectory: " << subDirectory << " was found in " << entry.path().string() << "\n";
 			std::cout << "The program assumes that this is a Library folder, containing external libraries and will therefore not search any deeper\n";
@@ -806,6 +845,34 @@ namespace DLL
 				break;
 			}
 		}
+
+		/* open the 3rdParty root CMake file */
+		HANDLE apiFile(
+			CreateFileA((entry.path().string() + "\\CMakeLists.txt").c_str(),
+				GENERIC_WRITE,
+				FILE_SHARE_WRITE,
+				nullptr,
+				OPEN_ALWAYS,
+				FILE_ATTRIBUTE_NORMAL,
+				nullptr)
+		);
+
+		assert(apiFile != INVALID_HANDLE_VALUE);
+
+		SetFilePointer(apiFile, 0, nullptr, FILE_BEGIN);
+		SetEndOfFile(apiFile);
+
+		std::string fileContents{};
+
+		for (const std::string& libName : libraryNames)
+		{
+			fileContents.append("add_subdirectory(" + libName + ")\n");
+		}
+
+		DWORD bytesWritten{};
+		assert(WriteFile(apiFile, fileContents.c_str(), static_cast<DWORD>(fileContents.size()), &bytesWritten, nullptr) != 0 && "DLLCreator::CreateAPIFile() > The API file could not be written to!");
+
+		assert(CloseHandle(apiFile) != 0 && "DLLCreator::CreateAPIFile() > Handle to file could not be closed!");
 	}
 
 	void DLLCreator::GenrerateSubDirectoryHCMakeFiles(const std::filesystem::directory_entry& _entry)
@@ -817,8 +884,8 @@ namespace DLL
 		const std::string libName(path.substr(path.find_last_of('\\') + 1, path.size() - path.find_last_of('\\')));
 
 		/* open the interface preset file */
-		HANDLE cmakeCppPresetFile(
-			CreateFileA("Resources/CMakeSubDirectoryInterfacePreset.txt",
+		HANDLE cmakeHeaderPresetFile(
+			CreateFileA("Resources/CMakeSubDirectoryHeaderPreset.txt",
 				GENERIC_READ,
 				FILE_SHARE_READ,
 				nullptr,
@@ -827,28 +894,28 @@ namespace DLL
 				nullptr)
 		);
 
-		assert(cmakeCppPresetFile != INVALID_HANDLE_VALUE);
+		assert(cmakeHeaderPresetFile != INVALID_HANDLE_VALUE);
 
 		std::basic_string<BYTE> fileContents{};
 
 		/* Read the file into a buffer */
-		const DWORD fileSize(GetFileSize(cmakeCppPresetFile, nullptr));
+		const DWORD fileSize(GetFileSize(cmakeHeaderPresetFile, nullptr));
 		fileContents.resize(fileSize);
 
 		DWORD readBytes{};
-		assert(ReadFile(cmakeCppPresetFile, fileContents.data(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::GenerateSubDirectoryCppCMakeFile() > File could not be read!");
-		assert(CloseHandle(cmakeCppPresetFile) != 0 && "DLLCreator::GenerateSubDirectoryCppCMakeFile() > Handle to file could not be closed!");
+		assert(ReadFile(cmakeHeaderPresetFile, fileContents.data(), fileSize, &readBytes, nullptr) != 0 && "DLLCreator::GenerateSubDirectoryCppCMakeFile() > File could not be read!");
+		assert(CloseHandle(cmakeHeaderPresetFile) != 0 && "DLLCreator::GenerateSubDirectoryCppCMakeFile() > Handle to file could not be closed!");
 
 		std::string convertedFileContents(ConvertToRegularString(fileContents));
 
 		/* Substitute the lib name, header location and project name in */
 		const std::regex libNameRegex("<LIBRARY_NAME>");
 		const std::regex headerLocationRegex("<HEADER_LOCATION>");
-		const std::regex projectNameRegex("<PROJECT_NAME>");
 
 		convertedFileContents = std::regex_replace(convertedFileContents, libNameRegex, libName);
 		convertedFileContents = std::regex_replace(convertedFileContents, headerLocationRegex, ""); /* folder contains only headers so... */
-		convertedFileContents = std::regex_replace(convertedFileContents, projectNameRegex, ConvertToRegularString(ProjectName));
+
+		LibIncludeDirectories.push_back(libName + "IncludeDir");
 
 		/* make the interface file */
 		HANDLE cmakeInterfaceFile(
@@ -891,28 +958,6 @@ namespace DLL
 				if (path.find(".cpp") != std::string::npos)
 				{
 					filesToAddToLibrary.push_back(path.substr(path.find_last_of('\\') + 1, path.size()));
-				}
-			}
-			/* If we find another directory, start this sequence again */
-			else if (entry.is_directory())
-			{
-				const int8_t subDirectoryType(CheckSubDirectory(entry));
-
-				switch (subDirectoryType)
-				{
-				case 0 /* headers only */:
-					/* nothing should happen */
-					break;
-				case 1 /* contains .cpp */:
-					/* Add every .cpp file to the library and set the include directories */
-					GenerateSubDirectoryCppCMakeFile(entry);
-					break;
-				case 2 /* contains .h and .lib */:
-					/* add the library name and set the include directories */
-					break;
-				case 3 /* contains .lib, .h and .dll */:
-					/*  */
-					break;
 				}
 			}
 		}
@@ -974,11 +1019,9 @@ namespace DLL
 		/* Substitute the lib name, header location and project name in */
 		const std::regex libNameRegex("<LIBRARY_NAME>");
 		const std::regex headerLocationRegex("<HEADER_LOCATION>");
-		const std::regex projectNameRegex("<PROJECT_NAME>");
 
 		convertedFileContents = std::regex_replace(convertedFileContents, libNameRegex, libName);
 		convertedFileContents = std::regex_replace(convertedFileContents, headerLocationRegex, headerLocation);
-		convertedFileContents = std::regex_replace(convertedFileContents, projectNameRegex, ConvertToRegularString(ProjectName));
 
 		const size_t insertPos{ convertedFileContents.find_first_of(')') };
 
@@ -988,6 +1031,8 @@ namespace DLL
 		{
 			convertedFileContents.insert(insertPos, cppFile + " ");
 		}
+
+		LibIncludeDirectories.push_back(libName + "IncludeDir");
 
 		/* make the cpp file */
 		HANDLE cmakeCppFile(
@@ -1213,12 +1258,13 @@ namespace DLL
 		const std::regex libNameRegex("<LIBRARY_NAME>");
 		const std::regex headerLocationRegex("<HEADER_LOCATION>");
 		const std::regex sourceLocationRegex("<SOURCE_LOCATION>");
-		const std::regex projectNameRegex("<PROJECT_NAME>");
 
 		convertedFileContents = std::regex_replace(convertedFileContents, libNameRegex, libName);
 		convertedFileContents = std::regex_replace(convertedFileContents, headerLocationRegex, includePath);
 		convertedFileContents = std::regex_replace(convertedFileContents, sourceLocationRegex, sourcePath);
-		convertedFileContents = std::regex_replace(convertedFileContents, projectNameRegex, ConvertToRegularString(ProjectName));
+
+		LibIncludeDirectories.push_back(libName + "IncludeDir");
+		LibSourceDirectories.push_back(libName + "SourceDir");
 
 		/* make the header + lib file */
 		HANDLE cmakeLibFile(
@@ -1318,21 +1364,27 @@ namespace DLL
 
 		std::string convertedFileContents(ConvertToRegularString(fileContents));
 
+		std::string dlls{};
+
+		for (const std::string& dllFile : dllsToCopy)
+		{
+			dlls.append("${CMAKE_CURRENT_SOURCE_DIR}<SOURCE_LOCATION>/" + dllFile + " ");
+		}
+
 		/* Substitute the lib name, header location and project name in */
 		const std::regex libNameRegex("<LIBRARY_NAME>");
 		const std::regex headerLocationRegex("<HEADER_LOCATION>");
 		const std::regex sourceLocationRegex("<SOURCE_LOCATION>");
-		const std::regex projectNameRegex("<PROJECT_NAME>");
+		const std::regex dllsRegex("<DLLS>");
 
 		convertedFileContents = std::regex_replace(convertedFileContents, libNameRegex, libName);
 		convertedFileContents = std::regex_replace(convertedFileContents, headerLocationRegex, includePath);
 		convertedFileContents = std::regex_replace(convertedFileContents, sourceLocationRegex, sourcePath);
-		convertedFileContents = std::regex_replace(convertedFileContents, projectNameRegex, ConvertToRegularString(ProjectName));
+		convertedFileContents = std::regex_replace(convertedFileContents, dllsRegex, dlls);
 
-		for (const std::string& dllFile : dllsToCopy)
-		{
-			convertedFileContents.append("install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/" + dllFile + " DESTINATION bin)\n");
-		}
+		LibIncludeDirectories.push_back(libName + "IncludeDir");
+		LibSourceDirectories.push_back(libName + "SourceDir");
+		DllDirectories.push_back(libName + "Dlls");
 
 		/* make the header + lib file */
 		HANDLE cmakeDLLFile(
@@ -1524,7 +1576,7 @@ namespace DLL
 
 			/* Get all the numbers from user input and save the requested entries */
 			std::string input(Utils::IO::ReadUserInput());
-				
+
 			if (input == "ALL")
 			{
 				for (const auto& entry : entries)
@@ -1600,7 +1652,12 @@ namespace DLL
 	size_t DLLCreator::GetNumberOfDirectoriesDeep(const std::string& filePath) const
 	{
 		const size_t countRootPath(std::count(RootPath.cbegin(), RootPath.cend(), '\\'));
-		const size_t countOtherPath(std::count(filePath.cbegin(), filePath.cend(), '\\'));
+		size_t countOtherPath(std::count(filePath.cbegin(), filePath.cend(), '\\'));
+
+		if (!std::filesystem::directory_entry(filePath).is_directory())
+		{
+			--countOtherPath;
+		}
 
 		return countOtherPath - countRootPath;
 	}

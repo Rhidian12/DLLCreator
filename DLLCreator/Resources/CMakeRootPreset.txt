@@ -1,3 +1,25 @@
 cmake_minimum_required(VERSION <VERSION_MAJOR>.<VERSION_MINOR>)
 
 project(<PROJECT_NAME>)
+
+set(SubDirectories <SUBDIRECTORIES>)
+foreach(Directory ${SubDirectories})
+	add_subdirectory(${Directory})
+endforeach()
+
+add_library(<PROJECT_NAME> INTERFACE)
+
+set(Libraries <LIBRARIES>)
+foreach(Library ${Libraries})
+	target_link_libraries(<PROJECT_NAME> INTERFACE ${Library})
+endforeach()
+
+set(Includes <INCLUDES>)
+foreach(IncludeDir ${Includes})
+	target_include_directories(<PROJECT_NAME> INTERFACE ${IncludeDir})
+endforeach()
+
+set(DLLS <DLLS>)
+foreach(Dll ${DLLS})
+	install(FILES ${Dll} DESTINATION bin)
+endforeach()

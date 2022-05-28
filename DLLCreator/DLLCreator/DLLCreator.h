@@ -55,5 +55,9 @@ namespace DLL
 
 		constexpr inline static const unsigned long /* DWORD */ ExportMacroLength{7};
 		constexpr inline static const unsigned char /* BYTE */ PreproExportMacro[ExportMacroLength + 1]{"EXPORT;"};
+
+		std::vector<std::string> LibIncludeDirectories{};
+		std::vector<std::string> LibSourceDirectories{};
+		std::vector<std::string> DllDirectories{};
 	};
 }
