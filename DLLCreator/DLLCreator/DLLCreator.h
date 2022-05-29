@@ -12,7 +12,7 @@ namespace DLL
 	class DLLCreator final
 	{
 	public:
-		DLLCreator(const std::string& rootPath);
+		DLLCreator(const std::string& rootPath, const std::string& outputPath);
 
 		void Convert();
 
@@ -50,6 +50,7 @@ namespace DLL
 		std::basic_string<unsigned char /* BYTE */> APIFileName;
 		std::basic_string<unsigned char /* BYTE */> APIFileNamePath;
 		std::basic_string<unsigned char /* BYTE */> APIMacro;
+		std::string OutputPath{};
 		std::vector<std::filesystem::directory_entry> PathEntries;
 		std::vector<std::string> FilteredFilePaths;
 

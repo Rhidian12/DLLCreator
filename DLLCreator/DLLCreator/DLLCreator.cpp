@@ -20,9 +20,10 @@
 
 namespace DLL
 {
-	DLLCreator::DLLCreator(const std::string& rootPath)
+	DLLCreator::DLLCreator(const std::string& rootPath, const std::string& outputPath)
 		: RootPath(Utils::IO::ConvertToByteString(rootPath))
 		, ProjectName(Utils::IO::ConvertToByteString(rootPath))
+		, OutputPath{ outputPath }
 	{
 		ProjectName = ProjectName.substr(ProjectName.find_last_of('\\') + 1, ProjectName.size() - ProjectName.find_last_of('\\'));
 
@@ -32,6 +33,13 @@ namespace DLL
 			{
 				c = '_';
 			}
+		}
+
+		assert(std::filesystem::exists(rootPath) && "The path to the root is invalid!");
+
+		if (!outputPath.empty())
+		{
+			assert(std::filesystem::exists(outputPath) && "The path to the output is invalid!");
 		}
 	}
 
@@ -638,13 +646,26 @@ namespace DLL
 
 		const std::string rootPath(ConvertToRegularString(RootPath));
 
-		system(
-			((("cd ") + rootPath) + " && " +
-				"mkdir DLL_BUILD && " +
-				"cd DLL_BUILD && " +
-				"cmake .. && "
-				"cmake --build . --config Release"
-				).c_str());
+		if (OutputPath.empty())
+		{
+			system(
+				((("cd ") + rootPath) + " && " +
+					"mkdir DLL_BUILD && " +
+					"cd DLL_BUILD && " +
+					"cmake .. && "
+					"cmake --build . --config Release"
+					).c_str());
+		}
+		else
+		{
+			system(
+				((("cd ") + rootPath) + " && " +
+					"mkdir DLL_BUILD && " +
+					"cd DLL_BUILD && " +
+					"cmake .. && "
+					"cmake --build . --config Release " + OutputPath
+					).c_str());
+		}
 	}
 
 	void DLLCreator::GenerateRootCMakeFile()
@@ -685,10 +706,12 @@ namespace DLL
 		const std::regex librariesRegex("<LIBRARIES>");
 		const std::regex includesRegex("<INCLUDES>");
 		const std::regex dllsRegex("<DLLS>");
+		const std::regex apiFileRegex("<API_FILE>");
 
 		convertedFileContents = std::regex_replace(convertedFileContents, versionMajorRegex, "3");
 		convertedFileContents = std::regex_replace(convertedFileContents, versionMinorRegex, "10");
 		convertedFileContents = std::regex_replace(convertedFileContents, projectNameRegex, ConvertToRegularString(ProjectName));
+		convertedFileContents = std::regex_replace(convertedFileContents, apiFileRegex, ConvertToRegularString(APIFileName));
 
 		/* Add sub directories */
 		std::string subDirectories{};
@@ -1377,10 +1400,10 @@ namespace DLL
 		const std::regex sourceLocationRegex("<SOURCE_LOCATION>");
 		const std::regex dllsRegex("<DLLS>");
 
+		convertedFileContents = std::regex_replace(convertedFileContents, dllsRegex, dlls);
 		convertedFileContents = std::regex_replace(convertedFileContents, libNameRegex, libName);
 		convertedFileContents = std::regex_replace(convertedFileContents, headerLocationRegex, includePath);
 		convertedFileContents = std::regex_replace(convertedFileContents, sourceLocationRegex, sourcePath);
-		convertedFileContents = std::regex_replace(convertedFileContents, dllsRegex, dlls);
 
 		LibIncludeDirectories.push_back(libName + "IncludeDir");
 		LibSourceDirectories.push_back(libName + "SourceDir");

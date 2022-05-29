@@ -1,25 +1,37 @@
 cmake_minimum_required(VERSION <VERSION_MAJOR>.<VERSION_MINOR>)
 
+# Make Project
 project(<PROJECT_NAME>)
 
+# Make the library we're producing
+add_library(<PROJECT_NAME> INTERFACE)
+
+# First, add all subdirectories 
 set(SubDirectories <SUBDIRECTORIES>)
 foreach(Directory ${SubDirectories})
 	add_subdirectory(${Directory})
 endforeach()
 
-add_library(<PROJECT_NAME> INTERFACE)
-
+# Next, set all variables. These are set in the sub directories and C++.
+# The following variables (between <>) get regex_replace'd in C++
 set(Libraries <LIBRARIES>)
+set(Includes <INCLUDES>)
+set(DLLS <DLLS>)
+
+# Next up, link all the previously made libraries to our original library
 foreach(Library ${Libraries})
 	target_link_libraries(<PROJECT_NAME> INTERFACE ${Library})
 endforeach()
 
-set(Includes <INCLUDES>)
+# Set all the includes for the library
 foreach(IncludeDir ${Includes})
 	target_include_directories(<PROJECT_NAME> INTERFACE ${IncludeDir})
 endforeach()
 
-set(DLLS <DLLS>)
+# Also include the API file
+target_include_directories(<PROJECT_NAME> INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/<API_FILE>)
+
+# Install all the DLLs
 foreach(Dll ${DLLS})
 	install(FILES ${Dll} DESTINATION bin)
 endforeach()
